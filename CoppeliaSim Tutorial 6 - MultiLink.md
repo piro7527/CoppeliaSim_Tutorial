@@ -32,19 +32,8 @@ Tutorial 5では単一の物体に外力を加えましたが、今回は**複�
 1. **File → New scene**
 
 ### 1.2 床について
-新規シーンには既に `Floor` が存在します。以下のどちらかを選んでください：
-
-**オプションA: 既存のFloorをそのまま使う**（推奨）
-- デフォルトの `Floor` はすでに静的で衝突判定もあるので、そのまま使えます
-- 何もせず次のステップへ進んでOK
-
-**オプションB: 新しい床を作り直す場合**
-1. Scene hierarchy で既存の `Floor` を右クリック → **Delete**
-2. **Add → Primitive shape → Plane**
-3. サイズ: X=2, Y=2
-4. ☐ **Dynamic and respondable** は **チェックしない**
-5. 名前を `Floor` に変更
-6. Position: X=0, Y=0, Z=0
+新規シーンには既に `Floor` が存在します。
+デフォルトの `Floor` はすでに静的で衝突判定もあるので、そのまま使います。特に設定変更は不要です。
 
 ---
 
@@ -54,11 +43,13 @@ Tutorial 5では単一の物体に外力を加えましたが、今回は**複�
 
 ### 2.1 形状を追加
 1. **Add → Primitive shape → Cuboid**
-2. サイズ: X=0.15, Y=0.15, Z=0.3
+2. サイズ: X=0.15, Y=0.15, Z=**0.6**
 3. ☐ **Dynamic and respondable** は **チェックしない**
 4. 名前を `BaseBlock` に変更
-5. Position: X=0, Y=0, Z=0.15
+5. Position: X=0, Y=0, Z=**0.3**
 6. Orientation: Alpha=0, Beta=0, Gamma=0
+
+> 💡 **サイズ変更について**: 作成済みのオブジェクト（プリミティブ）のサイズを変更するのは少し手順が複雑です。サイズを修正したい場合は、**そのオブジェクトを削除して、正しいサイズで作り直す** のが最も簡単で確実です。
 
 ### 2.2 色を変更
 1. **Adjust color** → グレー（例: 0.5, 0.5, 0.5）
@@ -69,15 +60,17 @@ Tutorial 5では単一の物体に外力を加えましたが、今回は**複�
 
 以下の表に従って各オブジェクトを作成してください：
 
-| オブジェクト  | サイズ         | Position (X, Y, Z) | Orientation (α, β, γ) | Dynamic      | 質量   |
-| ------------- | -------------- | ------------------ | --------------------- | ------------ | ------ |
-| BaseBlock     | 0.15×0.15×0.3  | 0, 0, 0.15         | 0, 0, 0               | ☐ NO         | -      |
-| ShoulderJoint | -              | 0, 0, 0.30         | **90**, 0, 0          | Dynamic/Free | -      |
-| UpperArm      | 0.05×0.05×0.2  | 0, 0, 0.20         | **90**, 0, 0          | ☑ YES        | 0.1kg  |
-| ElbowJoint    | -              | 0, 0, 0.10         | **90**, 0, 0          | Dynamic/Free | -      |
-| ForeArm       | 0.04×0.04×0.15 | 0, 0, 0.025        | **90**, 0, 0          | ☑ YES        | 0.05kg |
+| オブジェクト  | サイズ            | Position (X, Y, Z) | Orientation (α, β, γ) | Dynamic      | 質量   |
+| ------------- | ----------------- | ------------------ | --------------------- | ------------ | ------ |
+| BaseBlock     | 0.15×0.15×**0.6** | 0, 0, **0.3**      | 0, 0, 0               | ☐ NO         | -      |
+| ShoulderJoint | -                 | 0.1, 0, **0.6**    | **90**, 0, 0          | Dynamic/Free | -      |
+| UpperArm      | 0.05×0.05×0.2     | 0.1, 0, **0.5**    | **0**, 0, 0           | ☑ YES        | 0.1kg  |
+| ElbowJoint    | -                 | 0.1, 0, **0.4**    | **90**, 0, 0          | Dynamic/Free | -      |
+| ForeArm       | 0.04×0.04×0.15    | 0.1, 0, **0.325**  | **0**, 0, 0           | ☑ YES        | 0.05kg |
 
-> 💡 **ポイント**: すべてのジョイントとアームは **Alpha=90** で統一。アームは垂直方向に垂れ下がります。
+> 💡 **ポイント**: 
+> 1. ジョイントは **Alpha=90** (回転軸を水平にするため)、アームは **Alpha=0** (垂直にぶら下げるため) に設定します。
+> 2. アームが台座(BaseBlock)と衝突しないよう、X座標を **0.1** ずらして配置します。
 
 ---
 
@@ -88,8 +81,8 @@ Tutorial 5では単一の物体に外力を加えましたが、今回は**複�
 2. サイズ: X=0.05, Y=0.05, Z=0.2
 3. ☑️ **Create dynamic and respondable shape** にチェック
 4. 名前を `UpperArm` に変更
-5. Position: **X=0, Y=0, Z=0.20**
-6. Orientation: **Alpha=90, Beta=0, Gamma=0**
+5. Position: **X=0.1, Y=0, Z=0.5**
+6. Orientation: **Alpha=0, Beta=0, Gamma=0**
 
 ### 4.2 質量を設定
 1. **Dynamic properties dialog** → **Mass** を **0.1** kg に設定
@@ -104,7 +97,7 @@ Tutorial 5では単一の物体に外力を加えましたが、今回は**複�
 ### 5.1 ジョイントを追加
 1. **Add → Joint → Revolute**
 2. 名前を `ShoulderJoint` に変更
-3. Position: **X=0, Y=0, Z=0.30**（BaseBlockの上端）
+3. Position: **X=0.1, Y=0, Z=0.6**（BaseBlockの脇）
 4. Orientation: **Alpha=90, Beta=0, Gamma=0**
    > 💡 Alpha=90 でY軸まわりに回転。アームが重力で垂れ下がります。
 
@@ -128,8 +121,8 @@ BaseBlock
 2. サイズ: X=0.04, Y=0.04, Z=0.15
 3. ☑️ **Create dynamic and respondable shape** にチェック
 4. 名前を `ForeArm` に変更
-5. Position: **X=0, Y=0, Z=0.025**
-6. Orientation: **Alpha=90, Beta=0, Gamma=0**
+5. Position: **X=0.1, Y=0, Z=0.325**
+6. Orientation: **Alpha=0, Beta=0, Gamma=0**
 
 ### 6.2 質量を設定
 1. **Mass** を **0.05** kg に設定
@@ -144,7 +137,7 @@ BaseBlock
 ### 7.1 ジョイントを追加
 1. **Add → Joint → Revolute**
 2. 名前を `ElbowJoint` に変更
-3. Position: **X=0, Y=0, Z=0.10**（UpperArmの下端）
+3. Position: **X=0.1, Y=0, Z=0.4**（UpperArmの下端）
 4. Orientation: **Alpha=90, Beta=0, Gamma=0**
 
 ### 7.2 ジョイントのモードを設定
@@ -167,13 +160,14 @@ BaseBlock
 
 ### 8.1 重力テスト
 1. ▶️ **Start simulation**
-2. アームが重力で垂れ下がり、揺れながら静止するはずです
+2. **期待される動作**:
+   - アームは最初から垂直になっているため、**大きくは動きません**（これが正常です）。
+   - **重要**: アームがバラバラに落下せず、**繋がったままぶら下がっている**ことを確認してください。
 3. ⏹️ **Stop simulation**
 
-> 💡 **うまくいかない場合**:
-> - ジョイントが正しい位置にあるか確認
-> - 階層構造が正しいか確認
-> - Dynamicプロパティが有効か確認
+> 💡 **うまくいかない場合（落下してしまう場合）**:
+> - BaseBlockの `Dynamic` が無効（静的）になっているか確認
+> - Scene hierarchy で親子関係（階層構造）が正しいか確認
 
 ---
 
@@ -187,39 +181,50 @@ BaseBlock
 
 ### 8.2 スクリプトを編集
 
+> ⚠️ **コピー＆ペースト時の注意**:
+> 以下のコードには `function ... end` の塊が **2つ**（`sysCall_init` と `sysCall_actuation`）あります。
+> 枠線の部分（ \`\`\`lua や \`\`\` ）は含めずに、**これら2つの関数をすべてまとめて** コピーして貼り付けてください。
+
 ```lua
 function sysCall_init()
-    -- Get object handles
-    foreArmHandle = sim.getObject('..')  -- Parent object (ForeArm)
+    -- 1. まずこのスクリプトがついている場所を取得
+    foreArmHandle = sim.getObject('.')
     
-    -- Configuration
-    forceDelay = 1.5        -- When to apply force
-    forceApplied = false
+    -- 2. もしそれがShape（形状）でなければ、親（..）を確認
+    if sim.getObjectType(foreArmHandle) ~= sim.object_shape_type then
+        foreArmHandle = sim.getObject('..')
+    end
+
+    -- 3. それでもShapeでなければ、名前 "ForeArm" で直接検索（最終手段）
+    if sim.getObjectType(foreArmHandle) ~= sim.object_shape_type then
+        foreArmHandle = sim.getObject('/ForeArm')
+    end
     
-    -- Force parameters
-    forceMagnitude = 2.0    -- Newton (smaller force for lighter arm)
+    -- ※これで確実にForeArmを見つけ出します
+
+    forceDelay = 1.5                   -- 力を加える時間（秒）
+    forceMagnitude = 2.0               -- 力の強さ（ニュートン）
+    forceApplied = false               -- 力を加えたかどうかのフラグ
     
     print("=== 2-Link Arm Force Demo Ready ===")
-    print("Force will be applied to ForeArm at t=" .. forceDelay .. "s")
 end
 
 function sysCall_actuation()
     local t = sim.getSimulationTime()
     
-    if t >= forceDelay and not forceApplied then
-        -- Apply force to the tip of ForeArm
-        -- Force direction: X+ (horizontal push)
+    -- 指定した時間が経過し、まだ力を加えていなければ実行
+    if not forceApplied and t >= forceDelay then
+        -- 力の向き: X軸プラス方向（横に押す）
         local force = {forceMagnitude, 0, 0}
         
-        -- Position: tip of ForeArm (relative to center)
-        -- ForeArm length is 0.15m, so tip is at z=+0.075
-        local position = {0, 0, 0.075}
+        -- 力の点: ForeArmの先端（中心から下方向へ0.075m）
+        local position = {0, 0, -0.075}
         
+        -- 力を加える
         sim.addForce(foreArmHandle, position, force)
         
         forceApplied = true
-        print(string.format("Force [%.1f, 0, 0] N applied to ForeArm tip at t=%.2f s", 
-              forceMagnitude, t))
+        print("Force applied!")
     end
 end
 ```
@@ -260,7 +265,17 @@ UpperArmにもスクリプトを追加して、上腕に力を加えてみまし
 
 ```lua
 function sysCall_init()
-    upperArmHandle = sim.getObject('..')
+    -- UpperArmを見つける（自分 -> 親 -> 名前検索 の順で探す）
+    upperArmHandle = sim.getObject('.')
+    
+    if sim.getObjectType(upperArmHandle) ~= sim.object_shape_type then
+        upperArmHandle = sim.getObject('..')
+    end
+    
+    if sim.getObjectType(upperArmHandle) ~= sim.object_shape_type then
+        upperArmHandle = sim.getObject('/UpperArm')
+    end
+
     forceDelay = 1.5
     forceApplied = false
     print("=== UpperArm Force Script Ready ===")
@@ -269,15 +284,14 @@ end
 function sysCall_actuation()
     local t = sim.getSimulationTime()
     
-    if t >= forceDelay and not forceApplied then
-        -- Apply force to UpperArm center
-        local force = {3, 0, 0}  -- Stronger force for heavier arm
-        local position = {0, 0, 0}  -- Center of UpperArm
+    if not forceApplied and t >= forceDelay then
+        local force = {3, 0, 0}  -- 重いパーツなので少し強めに
+        local position = {0, 0, 0}  -- 中心を押す
         
         sim.addForce(upperArmHandle, position, force)
         
         forceApplied = true
-        print("Force applied to UpperArm at t=" .. t)
+        print("Force applied to UpperArm!")
     end
 end
 ```
@@ -297,24 +311,30 @@ ForeArmのスクリプトを以下に置き換えてみましょう：
 
 ```lua
 function sysCall_init()
-    foreArmHandle = sim.getObject('..')
+    -- ForeArmを見つける（自分 -> 親 -> 名前検索 の順で探す）
+    foreArmHandle = sim.getObject('.')
     
-    -- Continuous force parameters
+    if sim.getObjectType(foreArmHandle) ~= sim.object_shape_type then
+        foreArmHandle = sim.getObject('..')
+    end
+    
+    if sim.getObjectType(foreArmHandle) ~= sim.object_shape_type then
+        foreArmHandle = sim.getObject('/ForeArm')
+    end
+
     startTime = 1.0
     duration = 2.0
     
     print("=== Continuous Force Demo ===")
-    print("Force will be applied from t=" .. startTime .. "s for " .. duration .. "s")
 end
 
 function sysCall_actuation()
     local t = sim.getSimulationTime()
     
-    -- Apply continuous force during the specified time window
+    -- 指定した期間中（1.0秒〜3.0秒）、ずっと力を加え続ける
     if t >= startTime and t < startTime + duration then
-        -- Gentle continuous push
-        local force = {0.5, 0, 0}  -- Small force applied every frame
-        local position = {0, 0, 0.075}  -- Tip of ForeArm
+        local force = {0.5, 0, 0}      -- 弱い力を継続的に
+        local position = {0, 0, -0.075} -- 先端を押す
         
         sim.addForce(foreArmHandle, position, force)
     end
@@ -362,13 +382,13 @@ end
 - ジョイントは**リンクの接続点（境界）**に配置
 
 ```
-例: BaseBlock(高さ0.3, 中心Z=0.15) 
-    → 上端 Z=0.3
-    → ShoulderJoint Z=0.3
-    → UpperArm(高さ0.2) 中心 Z=0.4 (0.3 + 0.2/2)
-    → 上端 Z=0.5
-    → ElbowJoint Z=0.5
-    → ForeArm(高さ0.15) 中心 Z=0.575 (0.5 + 0.15/2)
+例: BaseBlock(高さ0.6, 中心Z=0.3) 
+    → 上端 Z=0.6
+    → ShoulderJoint Z=0.6
+    → UpperArm(高さ0.2) 中心 Z=0.5 (0.6 - 0.2/2: 下にぶら下げるのでマイナス方向)
+    → 下端 Z=0.4
+    → ElbowJoint Z=0.4
+    → ForeArm(高さ0.15) 中心 Z=0.325 (0.4 - 0.15/2)
 ```
 
 ---
