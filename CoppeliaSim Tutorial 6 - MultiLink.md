@@ -187,24 +187,22 @@ BaseBlock
 
 ```lua
 function sysCall_init()
-    -- 1. まずこのスクリプトがついている場所を取得
+    -- 1. Get the object this script is attached to
     foreArmHandle = sim.getObject('.')
     
-    -- 2. もしそれがShape（形状）でなければ、親（..）を確認
+    -- 2. If not a Shape, check parent (..)
     if sim.getObjectType(foreArmHandle) ~= sim.object_shape_type then
         foreArmHandle = sim.getObject('..')
     end
 
-    -- 3. それでもShapeでなければ、名前 "ForeArm" で直接検索（最終手段）
+    -- 3. If still not a Shape, search by name "ForeArm" (fallback)
     if sim.getObjectType(foreArmHandle) ~= sim.object_shape_type then
         foreArmHandle = sim.getObject('/ForeArm')
     end
-    
-    -- ※これで確実にForeArmを見つけ出します
 
-    forceDelay = 1.5                   -- 力を加える時間（秒）
-    forceMagnitude = 2.0               -- 力の強さ（ニュートン）
-    forceApplied = false               -- 力を加えたかどうかのフラグ
+    forceDelay = 1.5        -- Time to apply force (seconds)
+    forceMagnitude = 2.0    -- Force magnitude (Newtons)
+    forceApplied = false    -- Flag: force applied or not
     
     print("=== 2-Link Arm Force Demo Ready ===")
 end
@@ -212,15 +210,15 @@ end
 function sysCall_actuation()
     local t = sim.getSimulationTime()
     
-    -- 指定した時間が経過し、まだ力を加えていなければ実行
+    -- Apply force once after delay
     if not forceApplied and t >= forceDelay then
-        -- 力の向き: X軸プラス方向（横に押す）
+        -- Force direction: +X axis (push sideways)
         local force = {forceMagnitude, 0, 0}
         
-        -- 力の点: ForeArmの先端（中心から下方向へ0.075m）
+        -- Force point: ForeArm tip (0.075m below center)
         local position = {0, 0, -0.075}
         
-        -- 力を加える
+        -- Apply the force
         sim.addForce(foreArmHandle, position, force)
         
         forceApplied = true
@@ -231,11 +229,12 @@ end
 
 ### 8.3 コードの解説
 
-| 変数/関数                  | 説明                                      |
-| -------------------------- | ----------------------------------------- |
-| `foreArmHandle`            | ForeArmオブジェクトのハンドル             |
-| `forceMagnitude = 2.0`     | 2ニュートンの力（軽いアームなので小さめ） |
-| `position = {0, 0, 0.075}` | ForeArmの先端に力を加える                 |
+| 変数/関数                   | 説明                                      |
+| --------------------------- | ----------------------------------------- |
+| `foreArmHandle`             | ForeArmオブジェクトのハンドル             |
+| `forceMagnitude = 2.0`      | 2ニュートンの力（軽いアームなので小さめ） |
+| `force = {2.0, 0, 0}`       | X軸プラス方向（横向き）に力を加える       |
+| `position = {0, 0, -0.075}` | ForeArmの先端（中心から下方向へ0.075m）   |
 
 ---
 
@@ -252,20 +251,38 @@ end
 
 > 🧪 **観察**: これが「多リンク系の力の伝播」です。末端に力を加えると、ジョイントを通じて全体に影響が波及します。
 
+### 9.2 力とトルクの詳細
+
+> 💡 **ポイント**: このスクリプトでは力は**1フレーム（瞬間的）だけ**加えられます。継続的な力ではなく、「軽く押す」イメージです。
+
+前腕の先端にX方向の力を加えると、**両方のジョイントにトルクが発生**します：
+
+| ジョイント | モーメントアーム（力の作用点までの距離） | トルクの大きさ |
+| ---------- | ---------------------------------------- | -------------- |
+| 肩関節     | 約0.35m（肩→前腕先端）                   | 大きい         |
+| 肘関節     | 約0.075m（肘→前腕先端）                  | 小さい         |
+
+肩関節へのトルクが肘の約5倍大きいため、**肩の動きが目立ち、肘の曲がりは相対的に見えにくく**なります。セクション11の「継続的な力」を試すと、肘の曲がりもより観察しやすくなります。
+
 ---
 
 ## 10. 実験：異なるリンクに力を加える
 
-### 実験1: 上腕に力を加える
+### 実験1: 上腕だけに力を加える
 
-UpperArmにもスクリプトを追加して、上腕に力を加えてみましょう。
+前腕ではなく上腕に力を加えた場合の動きを観察してみましょう。
 
-1. `UpperArm` に新しいスクリプトを追加
-2. 以下のコードを使用：
+1. **ForeArmのスクリプトを無効化**:
+   - Scene hierarchy で ForeArm の下にあるスクリプトアイコン（📜）をダブルクリック
+   - **Scene Object Properties** ダイアログが開く（後ろに隠れている場合があります）
+   - **Script** タブの **"Enabled"** のチェックを外す
+   - ダイアログを閉じる
+2. `UpperArm` に新しいスクリプトを追加（Add → Script → Simulation script → Non-threaded → Lua）
+3. 以下のコードを使用：
 
 ```lua
 function sysCall_init()
-    -- UpperArmを見つける（自分 -> 親 -> 名前検索 の順で探す）
+    -- Find UpperArm (self -> parent -> name search)
     upperArmHandle = sim.getObject('.')
     
     if sim.getObjectType(upperArmHandle) ~= sim.object_shape_type then
@@ -285,8 +302,8 @@ function sysCall_actuation()
     local t = sim.getSimulationTime()
     
     if not forceApplied and t >= forceDelay then
-        local force = {3, 0, 0}  -- 重いパーツなので少し強めに
-        local position = {0, 0, 0}  -- 中心を押す
+        local force = {3, 0, 0}   -- Stronger force for heavier part
+        local position = {0, 0, 0} -- Push at center
         
         sim.addForce(upperArmHandle, position, force)
         
@@ -299,7 +316,15 @@ end
 > 💡 **比較ポイント**: 上腕に力を加えた場合と、前腕に力を加えた場合で、動きがどう違うか観察してください。
 
 ### 実験2: 複数のリンクに同時に力を加える
-両方のスクリプトを有効にして実行すると、複数の力が同時に作用する様子を観察できます。
+
+両方のスクリプトを有効にして、上腕と前腕に同時に力を加えてみましょう。
+
+1. **ForeArmのスクリプトを再度有効化**:
+   - Scene hierarchy で ForeArm の下にあるスクリプトアイコン（📜）をダブルクリック
+   - **Scene Object Properties** ダイアログの **Script** タブで **"Enabled"** にチェックを入れる
+   - ダイアログを閉じる
+2. ▶️ **Start simulation**
+3. 1.5秒後に**両方のリンクに同時に力が加わる**様子を観察
 
 ---
 
@@ -311,7 +336,7 @@ ForeArmのスクリプトを以下に置き換えてみましょう：
 
 ```lua
 function sysCall_init()
-    -- ForeArmを見つける（自分 -> 親 -> 名前検索 の順で探す）
+    -- Find ForeArm (self -> parent -> name search)
     foreArmHandle = sim.getObject('.')
     
     if sim.getObjectType(foreArmHandle) ~= sim.object_shape_type then
@@ -331,10 +356,10 @@ end
 function sysCall_actuation()
     local t = sim.getSimulationTime()
     
-    -- 指定した期間中（1.0秒〜3.0秒）、ずっと力を加え続ける
+    -- Apply force continuously during the specified period (1.0s - 3.0s)
     if t >= startTime and t < startTime + duration then
-        local force = {0.5, 0, 0}      -- 弱い力を継続的に
-        local position = {0, 0, -0.075} -- 先端を押す
+        local force = {0.5, 0, 0}       -- Weak continuous force
+        local position = {0, 0, -0.075}  -- Push at tip
         
         sim.addForce(foreArmHandle, position, force)
     end
@@ -342,6 +367,41 @@ end
 ```
 
 > 💡 **理学療法との関連**: これは「介助者が一定の力で押し続ける」状況をシミュレートしています。たとえば、立位で肩を一定時間押され続けた場合の姿勢応答などに応用できます。
+
+### 11.1 なぜ肘が曲がらないのか？
+
+継続的な力を加えると、アームが大きく回転してBaseBlockにぶつかります。しかし、**肘はほとんど曲がりません**。これは重要な物理的概念に関係しています。
+
+#### ワールド座標系 vs ローカル座標系
+
+```lua
+local force = {0.5, 0, 0}  -- This is WORLD coordinate system
+```
+
+この力は**ワールド座標系の固定方向（+X）**に加えられます。前腕がどの向きに回転しても、力の方向は変わりません。
+
+| 座標系             | 力の方向           | 特徴                                           |
+| ------------------ | ------------------ | ---------------------------------------------- |
+| **ワールド座標系** | 常に+X方向（固定） | アームの姿勢によっては肘を**伸展**させる方向に |
+| **ローカル座標系** | 前腕の向きに追従   | 常に肘を**屈曲**させる方向に                   |
+
+#### 動きの解析
+
+```
+0度〜90度: 力(+X)は肩を回転させる → 加速
+90度:      力と回転軸が平行 → トルクほぼゼロ、しかし慣性で継続
+90度〜:    力(+X)は逆方向に作用 → 減速するが、慣性で180度近くまで到達
+最終:      BaseBlockへの衝突で停止
+```
+
+#### 肘が曲がらない理由
+
+アームが大きく回転した後の姿勢では：
+- 力（+X方向）は肘を**屈曲**させる方向ではなく
+- 肘を**伸展**させる方向に作用している
+- そのため肘はほとんど曲がらない
+
+> 🔬 **重要**: 実際の介助場面では、介助者の手は患者の動きに**追従**します（ローカル座標系的）。固定方向に力を加え続けることは稀です。この違いを理解することは、シミュレーションと実際の臨床場面を結びつける上で重要です。
 
 ---
 
