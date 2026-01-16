@@ -26,15 +26,10 @@ Tutorial 4ではモーターで関節を「内部から」動かしましたが�
 ### 1.1 新規シーンを作成
 1. **File → New scene**
 
-### 1.2 床を追加
-1. **Add → Primitive shape → Plane**
-2. サイズ: X=2, Y=2 に設定
-3. ☑️ **Create respondable shape** にチェック（物体が床で止まるため）
-4. Scene hierarchy で名前を `Floor` に変更
-5. Position を確認: X=0, Y=0, **Z=0** になっていることを確認
+### 1.2 床の確認
+新規シーンにはデフォルトで `Floor` が配置されています。そのまま使用します。
 
-> ⚠️ **注意**: 床は **Dynamic にしない**でください（Dynamicにすると床自体が落下します）
-> 💡 Plane は厚みがないため、Z=0 のままで問題ありません。
+> 💡 **確認**: Scene hierarchy に `Floor` があることを確認してください。
 
 ### 1.3 ターゲット（押される物体）を追加
 1. **Add → Primitive shape → Cuboid**
