@@ -1,16 +1,16 @@
 # CoppeliaSim Tutorial 7
-## 簡易二足立位モデルと骨盤への外力実験
+## 懸垂二足モデルと骨盤への外力実験
 
-これまでのチュートリアルで学んだ知識を活用して、**簡易的な二足立位モデル**を作成します。
+これまでのチュートリアルで学んだ知識を活用して、**吊り下げ式の二足モデル**を作成します。
 このモデルでは**骨盤部に外力を加え**、その力がどのように下肢に伝わるかを観察します。
 
 ---
 
 ## 🎯 目的
-- **骨盤 + 両脚** の簡易立位モデルを自作する
+- **体幹 + 骨盤 + 両脚** の懸垂二足モデルを自作する
 - 各部位の質量・ジョイント設定を理解する
 - **骨盤への外力**が下肢運動にどう影響するか観察する
-- 力の伝達と姿勢反応の関係を考察する
+- 力の伝達と下肢の揺れを観察する
 
 ---
 
@@ -25,43 +25,68 @@
 ### 1.1 構成要素
 
 ```
-Pelvis（骨盤）
-├── RHip（右股関節）
-│   └── RThigh（右大腿）
-│       └── RKnee（右膝関節）
-│           └── RShank（右下腿）
-│               └── RAnkle（右足首関節）
-│                   └── RFoot（右足部）
-└── LHip（左股関節）
-    └── LThigh（左大腿）
-        └── LKnee（左膝関節）
-            └── LShank（左下腿）
-                └── LAnkle（左足首関節）
-                    └── LFoot（左足部）
+Trunk（体幹・固定）
+└── PelvisJoint（球関節）
+    └── Pelvis（骨盤）
+        ├── RHip（右股関節）
+        │   └── RThigh（右大腿）
+        │       └── RKnee（右膝関節）
+        │           └── RShank（右下腿）
+        │               └── RAnkle（右足首関節）
+        │                   └── RFoot（右足部）
+        └── LHip（左股関節）
+            └── LThigh（左大腿）
+                └── LKnee（左膝関節）
+                    └── LShank（左下腿）
+                        └── LAnkle（左足首関節）
+                            └── LFoot（左足部）
 ```
 
 ### 1.2 各部位のサイズ（参考値）
 
-| 部位   | 形状     | サイズ (m)            | 質量 (kg) |
-| ------ | -------- | --------------------- | --------- |
-| Pelvis | Cuboid   | 0.20 × 0.10 × 0.08    | 2.0       |
-| Thigh  | Cylinder | 半径 0.03, 長さ 0.30  | 1.0       |
-| Shank  | Cylinder | 半径 0.025, 長さ 0.30 | 0.7       |
-| Foot   | Cuboid   | 0.15 × 0.06 × 0.03    | 0.3       |
+| 部位   | 形状     | サイズ (m)            | 質量 (kg) | 動的 |
+| ------ | -------- | --------------------- | --------- | ---- |
+| Trunk  | Cuboid   | 0.15 × 0.10 × 0.15    | -         | OFF  |
+| Pelvis | Cuboid   | 0.20 × 0.10 × 0.08    | 2.0       | ON   |
+| Thigh  | Cylinder | 半径 0.03, 長さ 0.30  | 1.0       | ON   |
+| Shank  | Cylinder | 半径 0.025, 長さ 0.30 | 0.7       | ON   |
+| Foot   | Cuboid   | 0.06 × 0.15 × 0.03    | 0.3       | ON   |
 
 ---
 
-## 2. 骨盤を作成
+## 2. 体幹と骨盤を作成
 
-### 2.1 Pelvis（骨盤）の作成
+### 2.1 Trunk（体幹・固定用）の作成
+1. **Add → Primitive shape → Cuboid**
+2. サイズ: X=0.15, Y=0.10, Z=0.15
+3. **Create dynamic and respondable shape** にチェック
+4. **OK** をクリック
+5. オブジェクトを **ダブルクリック** してプロパティを開く
+6. **Show dynamic properties dialog** をクリック
+7. **Body is dynamic** のチェックを**外す**（静的オブジェクトにする）
+8. 名前を `Trunk` に変更
+9. 位置を調整: **Z = 1.1**
+
+### 2.2 PelvisJoint（球関節）の作成
+1. **Add → Joint → Spherical**
+2. 名前を `PelvisJoint` に変更
+3. 位置を調整: **Z = 1.0**（Trunkの下端付近）
+4. `PelvisJoint` を `Trunk` の子にする
+
+### 2.3 Pelvis（骨盤）の作成
 1. **Add → Primitive shape → Cuboid**
 2. サイズ: X=0.20, Y=0.10, Z=0.08
 3. **Create dynamic and respondable shape** にチェック
 4. **OK** をクリック
 5. オブジェクトを **ダブルクリック** してプロパティを開く
-6. **Dynamics properties** で **Mass = 2.0 kg** に設定
-7. 名前を `Pelvis` に変更
-8. 位置を調整: Z = 0.7（地面から70cm）
+6. **Show dynamic properties dialog** をクリック
+7. **Body is dynamic** が**ON**になっていることを確認（動的オブジェクト）
+8. **Mass = 2.0 kg** に設定
+9. 名前を `Pelvis` に変更
+10. 位置を調整: **Z = 0.95**
+11. `Pelvis` を `PelvisJoint` の子にする
+
+> 💡 この構造により、Trunkは固定され、Pelvisは球関節で吊り下げられた状態になります。外力を加えるとPelvisが揺れ、その動きが下肢に伝わります。
 
 ---
 
@@ -75,14 +100,14 @@ Pelvis（骨盤）
 4. **OK** をクリック
 5. **Mass = 1.0 kg** に設定
 6. 名前を `RThigh` に変更
-7. **Translation** タブで位置を **Z = 0.5** に設定（後で微調整します）
+7. **Position** タブで位置を **X = 0.05, Z = 0.75** に設定
 
 ### 3.2 右股関節（RHip）
 1. **Add → Joint → Revolute**
 2. 名前を `RHip` に変更
 3. **Orientation** タブで回転を設定: **Alpha=0, Beta=90, Gamma=0**
    - これでジョイントの回転軸（Z軸）がX軸方向（前後屈伸方向）に向きます。
-4. **Translation** タブで位置を **Z = 0.65** に設定（大腿の上端付近）
+4. **Position** タブで位置を **X = 0.05, Z = 0.90** に設定（大腿の上端付近）
 
 ### 3.3 階層構造を構築
 1. Scene hierarchy で以下の順にドラッグ＆ドロップ:
@@ -98,14 +123,49 @@ Pelvis（骨盤）
 2. 位置が正しければ、骨盤の下に大腿が配置されているはずです。
 
 ### 3.4 右下腿（RShank）と右膝関節（RKnee）
-1. 同様の手順で `RShank`（下腿）を作成
-2. `RKnee`（膝関節）を作成
-3. 階層: `RShank` → `RKnee` → `RThigh`
+
+#### RShank（下腿）を作成
+1. **Add → Primitive shape → Cylinder**
+2. サイズ: X=0.05, Y=0.05, Z=0.30
+3. **Create dynamic and respondable shape** にチェック
+4. **OK** をクリック
+5. **Mass = 0.7 kg** に設定
+6. 名前を `RShank` に変更
+7. **Position** タブで位置を **X = 0.05, Z = 0.45** に設定
+
+#### RKnee（膝関節）を作成
+1. **Add → Joint → Revolute**
+2. 名前を `RKnee` に変更
+3. **Orientation** タブで回転を設定: **Alpha=0, Beta=90, Gamma=0**
+4. **Position** タブで位置を **X = 0.05, Z = 0.60** に設定（大腿の下端付近）
+
+#### 階層構造を構築
+1. `RShank` を `RKnee` の子にする
+2. `RKnee` を `RThigh` の子にする
 
 ### 3.5 右足部（RFoot）と右足首関節（RAnkle）
-1. `RFoot` を **Cuboid** (0.15×0.06×0.03) で作成
-2. `RAnkle` を作成
-3. 階層: `RFoot` → `RAnkle` → `RShank`
+
+#### RFoot（足部）を作成
+1. **Add → Primitive shape → Cuboid**
+2. サイズ: X=0.06, Y=0.15, Z=0.03（Y方向が前後）
+3. **Create dynamic and respondable shape** にチェック
+4. **OK** をクリック
+5. **Mass = 0.3 kg** に設定
+6. 名前を `RFoot` に変更
+7. **Position** タブで位置を **X = 0.05, Y = 0.05, Z = 0.265** に設定
+   - X = 0.05: 右側オフセット
+   - Y = 0.05: 前方オフセット
+   - Z = 0.265: 床から離れた位置（吊り下げ状態）
+
+#### RAnkle（足首関節）を作成
+1. **Add → Joint → Revolute**
+2. 名前を `RAnkle` に変更
+3. **Orientation** タブで回転を設定: **Alpha=0, Beta=90, Gamma=0**
+4. **Position** タブで位置を **X = 0.05, Z = 0.30** に設定（下腿の下端付近）
+
+#### 階層構造を構築
+1. `RFoot` を `RAnkle` の子にする
+2. `RAnkle` を `RShank` の子にする
 
 ---
 
@@ -115,8 +175,9 @@ Pelvis（骨盤）
 1. `RHip` を選択
 2. **Ctrl+C** でコピー、**Ctrl+V** でペースト
 3. ペーストしたオブジェクトを `LHip` にリネーム
-4. 子オブジェクトも L で始まる名前に変更
-5. Y軸方向に移動させて左側に配置
+4. 子オブジェクトも L で始まる名前に変更（LThigh, LKnee, LShank, LAnkle, LFoot）
+5. `LHip` を選択し、**Position** タブで **X = -0.05** に設定（左側に配置）
+   > 💡 階層構造でコピーした場合、親（LHip）の位置を変更すると子も一緒に移動します。
 
 ### 4.2 階層構造の確認
 ```
@@ -144,8 +205,9 @@ Pelvis
 2. または既存の Floor を使用
 
 ### 5.2 足部の衝突設定
-1. `RFoot` と `LFoot` を選択
-2. プロパティで **Respondable** がONになっていることを確認
+1. `RFoot` をダブルクリックしてプロパティを開く
+2. **Respondable** がONになっていることを確認
+3. `LFoot` も同様に確認
 
 ---
 
@@ -154,13 +216,14 @@ Pelvis
 ### 6.1 各関節のモード設定
 すべての関節に対して:
 1. ジョイントをダブルクリック
-2. **Joint mode** を **Passive** に設定（自由に動く）
-3. 必要に応じて **Damping** を追加（0.1〜0.5程度）
+2. **Mode** が **Dynamic mode** になっていることを確認（物理演算で自由に動く）
+   > 💡 Bulletエンジンにはジョイントの Damping 設定がありません。動きを抑制したい場合は MuJoCo や Vortex エンジンを検討してください。
 
 ### 6.2 関節角度の制限（オプション）
 膝が逆に曲がらないように制限を設定:
 1. `RKnee` と `LKnee` を選択
-2. **Position min** = -2.0 rad, **Position range** = 2.0 rad
+2. **Position is cyclic** のチェックを外す
+3. **Pos. min [deg]** = -120, **Pos. range [deg]** = 120 に設定
 
 ---
 

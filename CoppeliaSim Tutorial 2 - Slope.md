@@ -138,7 +138,10 @@ CoppeliaSim のデフォルトの**グラウンドプレーン**（チェッカ�
 | Body is respondable | ✅ ON                         |
 
 ### 5.4 物理プロパティを設定（オプション）
-**Engine properties** → Bullet：
+1. Sphere をダブルクリックして **Scene Object Properties** を開く
+2. **Show dynamic properties dialog** ボタンをクリック
+3. 開いたダイアログの **Engine properties** ボタンをクリック
+4. 表示されるJSONで `bullet` セクションの値を編集：
 ```json
 "restitution": 0.3,
 "friction": 0.5
