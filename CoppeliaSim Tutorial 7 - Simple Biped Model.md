@@ -64,7 +64,8 @@ Trunk（体幹・固定）
 5. オブジェクトを **ダブルクリック** してプロパティを開く
 6. **Show dynamic properties dialog** をクリック
 7. **Body is dynamic** のチェックを**外す**（静的オブジェクトにする）
-8. 名前を `Trunk` に変更
+8. **Body is respondable** のチェックも**外す**（衝突しないようにする）
+9. 名前を `Trunk` に変更
 9. 位置を調整: **Z = 0.84**
 
 ### 2.2 PelvisJoint（球関節）の作成
@@ -81,8 +82,9 @@ Trunk（体幹・固定）
 5. オブジェクトを **ダブルクリック** してプロパティを開く
 6. **Show dynamic properties dialog** をクリック
 7. **Body is dynamic** が**ON**になっていることを確認（動的オブジェクト）
-8. **Mass = 2.0 kg** に設定
-9. 名前を `Pelvis` に変更
+8. **Body is respondable** のチェックを**外す**（脚やTrunkとの衝突防止）
+9. **Mass = 2.0 kg** に設定
+10. 名前を `Pelvis` に変更
 10. 位置を調整: **Z = 0.72**
 11. `Pelvis` を `PelvisJoint` の子にする
 
@@ -92,22 +94,24 @@ Trunk（体幹・固定）
 
 ## 3. 右脚を作成
 
-### 3.1 右大腿（RThigh）
-1. **Add → Primitive shape → Cylinder**
-2. サイズ: X=0.06, Y=0.06, Z=0.30
-   - **注**: Cylinder（円柱）の場合、XとYのサイズは連動します。片方を変更すると自動的にもう一方も同じ値になります。
-3. **Create dynamic and respondable shape** にチェック
-4. **OK** をクリック
-5. **Mass = 1.0 kg** に設定
-6. 名前を `RThigh` に変更
-7. **Position** タブで位置を **X = 0.05, Z = 0.53** に設定
-
-### 3.2 右股関節（RHip）
+### 3.1 右股関節（RHip）
 1. **Add → Joint → Revolute**
 2. 名前を `RHip` に変更
 3. **Orientation** タブで回転を設定: **Alpha=0, Beta=90, Gamma=0**
    - これでジョイントの回転軸（Z軸）がX軸方向（前後屈伸方向）に向きます。
 4. **Position** タブで位置を **X = 0.05, Z = 0.68** に設定（大腿の上端付近）
+
+### 3.2 右大腿（RThigh）
+1. **Add → Primitive shape → Cylinder**
+2. サイズ: X=0.06, Y=0.06, Z=0.30
+   - **注**: Cylinder（円柱）の場合、XとYのサイズは連動します。片方を変更すると自動的にもう一方も同じ値になります。
+3. **Create dynamic and respondable shape** にチェック
+4. **OK** をクリック
+5. **Double click** the shape to open properties.
+6. **Show dynamic properties dialog** -> **Body is respondable** のチェックを**外す**（骨盤や膝との干渉防止）
+7. **Mass = 1.0 kg** に設定
+6. 名前を `RThigh` に変更
+7. **Position** タブで位置を **X = 0.05, Z = 0.53** に設定
 
 ### 3.3 階層構造を構築
 1. Scene hierarchy で以下の順にドラッグ＆ドロップ:
@@ -124,26 +128,33 @@ Trunk（体幹・固定）
 
 ### 3.4 右下腿（RShank）と右膝関節（RKnee）
 
-#### RShank（下腿）を作成
-1. **Add → Primitive shape → Cylinder**
-2. サイズ: X=0.05, Y=0.05, Z=0.30
-3. **Create dynamic and respondable shape** にチェック
-4. **OK** をクリック
-5. **Mass = 0.7 kg** に設定
-6. 名前を `RShank` に変更
-7. **Position** タブで位置を **X = 0.05, Z = 0.23** に設定
-
 #### RKnee（膝関節）を作成
 1. **Add → Joint → Revolute**
 2. 名前を `RKnee` に変更
 3. **Orientation** タブで回転を設定: **Alpha=0, Beta=90, Gamma=0**
 4. **Position** タブで位置を **X = 0.05, Z = 0.38** に設定（大腿の下端付近）
 
+#### RShank（下腿）を作成
+1. **Add → Primitive shape → Cylinder**
+2. サイズ: X=0.05, Y=0.05, Z=0.30
+3. **Create dynamic and respondable shape** にチェック
+4. **OK** をクリック
+5. **Double click** -> **Dynamic properties** -> **Body is respondable** のチェックを**外す**
+6. **Mass = 0.7 kg** に設定
+6. 名前を `RShank` に変更
+7. **Position** タブで位置を **X = 0.05, Z = 0.23** に設定
+
 #### 階層構造を構築
 1. `RShank` を `RKnee` の子にする
 2. `RKnee` を `RThigh` の子にする
 
 ### 3.5 右足部（RFoot）と右足首関節（RAnkle）
+
+#### RAnkle（足首関節）を作成
+1. **Add → Joint → Revolute**
+2. 名前を `RAnkle` に変更
+3. **Orientation** タブで回転を設定: **Alpha=0, Beta=90, Gamma=0**
+4. **Position** タブで位置を **X = 0.05, Z = 0.08** に設定（下腿の下端付近）
 
 #### RFoot（足部）を作成
 1. **Add → Primitive shape → Cuboid**
@@ -156,12 +167,6 @@ Trunk（体幹・固定）
    - X = 0.05: 右側オフセット
    - Y = 0.05: 前方オフセット
    - Z = 0.065: 床から5cm浮いた位置（吊り下げ状態）
-
-#### RAnkle（足首関節）を作成
-1. **Add → Joint → Revolute**
-2. 名前を `RAnkle` に変更
-3. **Orientation** タブで回転を設定: **Alpha=0, Beta=90, Gamma=0**
-4. **Position** タブで位置を **X = 0.05, Z = 0.08** に設定（下腿の下端付近）
 
 #### 階層構造を構築
 1. `RFoot` を `RAnkle` の子にする
@@ -200,11 +205,7 @@ Pelvis
 
 ## 5. 地面との接触設定
 
-### 5.1 床を追加
-1. **Add → Primitive shape → Plane**
-2. または既存の Floor を使用
-
-### 5.2 足部の衝突設定
+### 5.1 足部の衝突設定
 1. `RFoot` をダブルクリックしてプロパティを開く
 2. **Respondable** がONになっていることを確認
 3. `LFoot` も同様に確認
@@ -238,6 +239,12 @@ Pelvis
 ```lua
 function sysCall_init()
     pelvisHandle = sim.getObject('/Pelvis')
+    
+    -- 無重力状態にする（足部の垂れ下がり防止）
+    -- sim.setFloatParam(sim.floatparam_gravity_z, 0) -- 古い記述
+    sim.setArrayParameter(sim.arrayparam_gravity, {0, 0, 0})
+    
+    print("Zero Gravity Mode: ON (Gravity set to 0,0,0)")
     
     forceDelay = 2.0        -- 2秒後に力を加え始める
     forceDuration = 0.3     -- 0.3秒間力を加える
