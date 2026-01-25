@@ -6,9 +6,10 @@ Tutorial 7 で作成した「懸垂二足モデル」をベースに、モデル
 ---
 
 ## 🎯 目的
-- モデルの物理パラメータ（質量、長さ）を変更して挙動の違いを理解する
-- ジョイントの可動域制限や制御（PD制御など）を導入する
-- センサーを追加してデータを取得する
+## 🎯 目的
+- モデルの物理パラメータ（質量）を人体データに基づいて調整する
+- 外力を加える位置（骨盤の中心 vs 右端）による挙動の違いを実験する
+- 物理エンジン設定（Damping）で摩擦・減衰を追加する方法を学ぶ
 
 ---
 
@@ -74,67 +75,89 @@ Trunk（体幹）とPelvis（骨盤）などが衝突せず、身体が柱をす
 | **R/L Foot**  | 足部                       | **1.0 kg**  | 片脚、全身の約1.6% |
 > **合計**: 41 + (6+2.5+1)*2 = 60 kg
 
-#### 変更後の注意点:
-#### 変更後の注意点:
-質量が増えましたが、**無重力状態**で微細な動きを観察するには **5N** 程度で十分です。
-```lua
-forceMagnitude = 5.0  -- 15N -> 5N に減らす
-```
 
-### 2.2 脚の長さの変更
-脚の長さを変えると、振り子の周期が変わるはずです。
-
-#### 実験内容:
-1. `RThigh`, `LThigh` の長さを 0.30m -> **0.50m** に変更
-   - 形状（Cylinder）のサイズ変更
-   - 子オブジェクト（Knee, Shank...）の位置調整が必要
-2. `RShank`, `LShank` も同様に変更
-   - **観察**: 揺れの周期（ゆっくりの揺れになるか？）を確認
 
 ---
 
-## 3. 制御の導入（PD制御などの予備実験）
 
-現在は `Passive mode` (Dynamic) で自由にぶら下がっているだけですが、関節にバネのような性質を持たせることで、姿勢制御の第一歩を踏み出します。
 
-### 3.1 関節をバネ・ダンパ系にする（Stiffness）
-関節が「ぐにゃぐにゃ」ではなく、ある程度姿勢を保とうとする力を設定します。
+## 3. 外力パラメータの変更実験
 
-#### 手順:
-1. ジョイント（例: `RHip`）をダブルクリック
-2. **Dynamic parameters** を開く
-3. **Control loop enabled** をチェック (または **Hybrid operation** など)
-4. **Spring-damper mode** を選択
-   - **Spring (k)**: バネ定数。値を大きくすると硬くなる。
-   - **Damping (c)**: 減衰係数。値を大きくすると粘り気が出る（振動が収まる）。
+ここでは、Tutorial 7 で設定した「骨盤への外力」の条件を変更し、身体がどのように反応するかを実験します。
 
-### 3.2 スクリプトでの制御（推奨）
-Tutorial 7 のスクリプトを拡張して、関節トルクを計算して適用する方法もあります。
+### 3.1 外力を加える位置の変更（右側へ）
+現在は「骨盤の中心」に力を加えていますが、これを「骨盤の右側」に変更してみます。
+中心からオフセットした位置に力を加えることで、回転（ヨー軸周りなどの）モーメントが発生し、違った挙動になるはずです。
+
+#### 修正するスクリプト:
+以下のコードをコピーして、スクリプト全体を上書きしてください。
+> **注意**: コードブロックの最初にある ` ```lua ` と、最後の ` ``` ` はコピーしないでください。中身のコードのみを貼り付けます。
 
 ```lua
--- 例: 股関節を特定の角度に保とうとするP制御
-function sysCall_actuation()
-    -- ... 外力処理 ...
-
-    -- P制御（比例制御）
-    local kP = 10.0 -- バネ係数
-    local targetAngle = 0
-    local currentAngle = sim.getJointPosition(rHipHandle)
+function sysCall_init()
+    pelvisHandle = sim.getObject('/Pelvis')
     
-    -- トルク計算など（Force modeでの設定が必要）
+    -- Enable zero gravity mode (prevent feet from dangling)
+    sim.setArrayParameter(sim.arrayparam_gravity, {0, 0, 0})
+    
+    print("Zero Gravity Mode: ON (Gravity set to 0,0,0)")
+    
+    forceDelay = 2.0        -- Apply force after 2.0 seconds
+    forceDuration = 0.3     -- Duration of force application
+    forceMagnitude = 1.0    -- 1.0 Newton (Adjusted)
+    forceStarted = false
+    forceEnded = false
+    
+    print("=== Pelvis Force Demo Ready ===")
+    print("Force will be applied at t=" .. forceDelay .. " seconds")
+end
+
+function sysCall_actuation()
+    local t = sim.getSimulationTime()
+    
+    if t >= forceDelay and t < forceDelay + forceDuration then
+        if not forceStarted then
+             forceStarted = true
+             print("Force started!")
+        end
+        
+        -- Define force vector
+        local force = {0, forceMagnitude, 0}
+        
+        -- Change position from center {0, 0, 0} to right edge {0.1, 0, 0}
+        -- Pelvis width is 0.20m, so 0.1m is the right edge
+        local position = {0.1, 0, 0} 
+        
+        sim.addForce(pelvisHandle, position, force)
+        
+    elseif t >= forceDelay + forceDuration and not forceEnded then
+        forceEnded = true
+        print("Force ended!")
+    end
 end
 ```
 
----
+#### 実験と観察:
+- **予想**: 重心から離れた位置を押すため、骨盤が回転しようとする動きが含まれるはずです。
+- **観察**: 脚の揺れ方に左右差が出るか、ねじれが発生するかを確認してください。
 
-## 4. センサーの追加
+### 3.2 参考：揺れを抑える（摩擦・減衰の追加）
+「外力を弱める」と揺れ幅は小さくなりますが、摩擦がないといつまでも揺れ続けてしまいます。
+球関節（PelvisJoint）の設定を変更するのは難しいため、**Pelvis（骨盤自体）** に空気抵抗のような減衰を設定するのが最も簡単です。
 
-### 4.1 Force Sensor（力覚センサ）
-足裏にどれくらいの床反力がかかっているか計測します。
+#### 手順:
+1. `Pelvis`（直方体）をダブルクリック
+2. **Dynamic properties dialog** を開く
+3. **Engine properties** (または **Bullet properties**) というボタンがある場合はそれをクリック
+4. 使用している物理エンジン（通常は **Bullet**）の項目を探します。
+5. 以下の値を変更してください（初期値は 0 になっていることが多いです）：
+   - **linearDamping** (または linearDrag): **0.5**
+   - **angularDamping** (または angularDrag): **0.5**
+   
 
-1. `RAnkle` と `RFoot` の間に **Force sensor** を挿入する
-   - **Add -> Force sensor**
-   - 階層構造を変更: `RAnkle` -> `ForceSensor` -> `RFoot`
-2. グラフを追加して、力の変化（Z軸方向）をプロットする
+
+> 💡 **外力を減らすのとどう違う？**
+> - **外力を減らす**: 最初に「ドン」と押される勢いが弱くなるだけです（小さい幅で揺れ続けます）。
+> - **減衰(Damping)を増やす**: 揺れがすぐに収束して止まるようになります（ブレーキがかかるイメージ）。
 
 ---
