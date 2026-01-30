@@ -228,6 +228,8 @@ Pelvis
 3. 以下のLuaコードを記述します。
 
 ```lua
+sim = require('sim')
+
 function sysCall_init()
     -- Get object handles
     rHip = sim.getObjectHandle("RHipJoint")
@@ -298,8 +300,14 @@ end
 - **立ち上がるか**: 1秒後から膝が伸びて、体が持ち上がるはずです。膝が変な方向に曲がるなら `targetKnee` の符号を確認。
 
 ### 5.2 トラブルシューティング
+- **膝が曲がって崩れ落ちる（スクリプトが効かない）**:
+  - **Control Mode**: ジョイントの Dynamic properties で **Control mode** が **Position** になっているか確認してください。（PassiveやFreeだと制御できません）
+  - **Position is cyclic**: **OFF（チェックなし）** にしてください。
+  - **Pos. min / Pos. range**: **Pos. min = -180**, **Pos. range = 360** に設定してください。
+    - 画像の設定（Min=0, Range=140）だと、**0度〜140度（屈曲方向）** にしか動けず、目標の **-90度（伸展）** に動こうとすると0度で止まってしまいます。
+  - **Motor enabled**: チェックが入っているか確認してください。
+- **力が足りない**: 各ジョイントの `Max torque` を増やしてください（150 -> 500〜1000など）。
 - **後ろに倒れる**: 「お辞儀」の角度（-45度）をもっと深くする（-50, -60）か、足の位置を少し手前に引いてみてください。
-- **力が足りない**: 各ジョイントの `Max torque` を増やしてください（150 -> 300など）。
 
 ---
 
