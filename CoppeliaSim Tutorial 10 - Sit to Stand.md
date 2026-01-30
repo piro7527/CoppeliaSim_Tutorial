@@ -130,8 +130,9 @@ CoppeliaSimのチュートリアル第10弾です。今回は**椅子からの�
 5. **Body is dynamic**: **ON**
 6. **Body is respondable**: **ON**
 7. 位置: **X=0.40, Y=-0.08, Z=0.02** （床の上に接地）
-8. 親: `RAnkleJoint`
-9. 色: 分かりやすくするため、少し色を変えておくと良いでしょう。
+8. **Orientation**: **Alpha=0, Beta=0, Gamma=0**
+9. 親: `RAnkleJoint`
+10. 色: 分かりやすくするため、少し色を変えておくと良いでしょう。
 
 > ⚠️ **重要**: 各オブジェクトは、**Position と Orientation を設定してから親を設定**してください。親を先に設定すると、座標がローカル座標系に変換されて意図しない位置になることがあります。
 
@@ -228,7 +229,7 @@ Pelvis
 
 ```lua
 function sysCall_init()
-    -- ハンドルの取得
+    -- Get object handles
     rHip = sim.getObjectHandle("RHipJoint")
     lHip = sim.getObjectHandle("LHipJoint")
     rKnee = sim.getObjectHandle("RKneeJoint")
@@ -236,7 +237,7 @@ function sysCall_init()
     rAnkle = sim.getObjectHandle("RAnkleJoint")
     lAnkle = sim.getObjectHandle("LAnkleJoint")
 
-    -- 動作フェーズ管理
+    -- Phase management
     phase = 0
     timer = 0
 end
@@ -245,38 +246,39 @@ function sysCall_actuation()
     dt = sim.getSimulationTimeStep()
     timer = timer + dt
     
-    -- ターゲット角度の変数（ラジアン）
+    -- Target angle variables (radians)
     local targetHip = 0
     local targetKnee = 0
     local targetAnkle = 0
 
-    -- 関節軸の設定に基づく回転方向（Alpha=-90の場合）：
-    -- Hip:  負(-45) = 屈曲（前屈） / 正(+10) = 伸展（直立）
-    -- Knee: 正(+90) = 屈曲（正座） / 負(-90) = 伸展（直立）
+    -- Rotation direction based on joint orientation (When Alpha=-90 / Axis Left):
+    -- Hip:  Positive (+45) = Flexion (Bend forward/Bow) / Negative (-10) = Extension (Stand up)
+    -- Knee: Positive (+90) = Extension (Straighten) / Negative (-90) = Flexion (Sit)
+    -- Note: Since "0" is the seated pose (construction pose), Standing requires ~90 deg moves.
     
-    -- フェーズ1: 重心前方移動（お辞儀） [0.0s - 1.0s]
+    -- Phase 1: Move Center of Mass forward (Bowing) [0.0s - 1.0s]
     if timer < 1.0 then
-        -- 股関節を深く曲げる（上体を前に倒す）
-        targetHip = -45 * math.pi / 180   -- 屈曲
-        targetKnee = 0                    -- そのまま
-        targetAnkle = 20 * math.pi / 180  -- 軽く背屈してバランスをとる
+        -- Flex hip deeply (Lean forward)
+        targetHip = 45 * math.pi / 180    -- Flexion (+ is forward)
+        targetKnee = 0                    -- Keep current (Sit)
+        targetAnkle = 20 * math.pi / 180  -- Slight dorsiflexion for balance
         
-    -- フェーズ2: 離殿・伸展（立ち上がり） [1.0s - 3.0s]
+    -- Phase 2: Liftoff and Extension (Stand up) [1.0s - 3.0s]
     elseif timer < 3.0 then
-        -- 股関節・膝関節を伸展（直立へ）
+        -- Extend hip and knee joints (To upright position)
         
-        targetHip = 10 * math.pi / 180    -- 伸展（直立姿勢へ）
-        targetKnee = -90 * math.pi / 180   -- 伸展（膝を伸ばす）
-        targetAnkle = 10 * math.pi / 180  -- バランス調整
+        targetHip = -80 * math.pi / 180   -- Extension (Move towards upright ~ -90)
+        targetKnee = 90 * math.pi / 180   -- Extension (Straighten knee ~ +90)
+        targetAnkle = 10 * math.pi / 180  -- Balance adjustment
         
     else
-        -- 3.0秒以降は姿勢保持
-        targetHip = 10 * math.pi / 180
-        targetKnee = -90 * math.pi / 180
+        -- Maintain posture after 3.0s
+        targetHip = -80 * math.pi / 180
+        targetKnee = 90 * math.pi / 180
         targetAnkle = 10 * math.pi / 180
     end
     
-    -- 制御実行（P制御）
+    -- Execute control (P control)
     sim.setJointTargetPosition(rHip, targetHip)
     sim.setJointTargetPosition(lHip, targetHip)
     sim.setJointTargetPosition(rKnee, targetKnee)
