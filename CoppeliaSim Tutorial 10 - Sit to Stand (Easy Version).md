@@ -89,7 +89,7 @@
 5. 設定: **Dynamic mode**
     - **Control Mode**: **Position**
     - **Position is cyclic**: **OFF**
-    - **Max Torque**: **100**
+    - **Max Torque**: **500**
     - **Pos. min [deg]**: **-180**
     - **Pos. range [deg]**: **360**
 6. 親: `RShank`
@@ -111,6 +111,19 @@
 
 ---
 
+### 2.4 関節設定の最終確認（重要）
+スクリプトで制御する前に、全てのジョイント（`RHipJoint`, `RKneeJoint`, ... `LAnkleJoint`）が正しく設定されているか確認します。これらが間違っていると、スクリプトを実行しても動きません。
+
+| 項目                      | 設定値       | 備考                                                                  |
+| :------------------------ | :----------- | :-------------------------------------------------------------------- |
+| **Control Mode**          | **Position** | Dynamic Properties 内。これ以外だと動きません。                       |
+| **Position is cyclic**    | **OFF**      | Scene Object Properties 内。チェックを外す。                          |
+| **Pos. min [deg]**        | **-180**     | 同上。可動域の下限。                                                  |
+| **Pos. range [deg]**      | **360**      | 同上。可動域の範囲。                                                  |
+| **Max. velocity [deg/s]** | **90**       | Dynamic Properties 内。ゆっくり動かすため下げる（デフォルト360→90）。 |
+
+---
+
 ## 3. スクリプトの作成（座る → 立つ）
 
 `Pelvis` に以下のスクリプトを追加してください。
@@ -119,12 +132,14 @@
 sim = require('sim')
 
 function sysCall_init()
-    rHip = sim.getObjectHandle("RHipJoint")
-    lHip = sim.getObjectHandle("LHipJoint")
-    rKnee = sim.getObjectHandle("RKneeJoint")
-    lKnee = sim.getObjectHandle("LKneeJoint")
-    rAnkle = sim.getObjectHandle("RAnkleJoint")
-    lAnkle = sim.getObjectHandle("LAnkleJoint")
+    -- Get object handles (Modern API)
+    -- ":/" means search for the object by alias anywhere in the scene
+    rHip = sim.getObject(":/RHipJoint")
+    lHip = sim.getObject(":/LHipJoint")
+    rKnee = sim.getObject(":/RKneeJoint")
+    lKnee = sim.getObject(":/LKneeJoint")
+    rAnkle = sim.getObject(":/RAnkleJoint")
+    lAnkle = sim.getObject(":/LAnkleJoint")
     
     timer = 0
 end
@@ -141,7 +156,7 @@ function sysCall_actuation()
     -- 直立(0度)の状態から、膝を90度に曲げて座ります
     if timer < 2.0 then
         -- 座る動作
-        targetHip = 80 * math.pi / 180    -- 股関節を曲げる（上体を倒すのではなく、脚に対し骨盤を曲げる）
+        targetHip = -80 * math.pi / 180   -- 股関節を曲げる（-80: 屈曲 / +80: 伸展）
         targetKnee = 90 * math.pi / 180   -- 膝を曲げる
         targetAnkle = -10 * math.pi / 180 -- 足首バランス
         
