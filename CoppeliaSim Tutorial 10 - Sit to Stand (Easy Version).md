@@ -156,9 +156,9 @@ function sysCall_actuation()
     -- 直立(0度)の状態から、膝を90度に曲げて座ります
     if timer < 2.0 then
         -- 座る動作
-        targetHip = -80 * math.pi / 180   -- 股関節を曲げる（-80: 屈曲 / +80: 伸展）
+        targetHip = -50 * math.pi / 180   -- 股関節（前傾を浅くする：バランス維持）
         targetKnee = 90 * math.pi / 180   -- 膝を曲げる
-        targetAnkle = -10 * math.pi / 180 -- 足首バランス
+        targetAnkle = 20 * math.pi / 180  -- 足首を曲げる（背屈：膝を前に出す）
         
     -- PHASE 2: Stand Up (2s - 5s)
     -- 全てを0度（直立）に戻します
