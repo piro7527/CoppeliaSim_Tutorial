@@ -135,16 +135,24 @@
 一番下の `RFoot` にスクリプトを付けます。
 
 1.  `RFoot` を選択 > Add > Script > Child script
-2.  以下のコードを入力
+2.  以下のコードを入力（**グラフ機能も含まれています**）
 
+```lua
 sim = require('sim')
 
 function sysCall_init()
-    -- 下から積み上げているので、Footから近い順に取得
     -- ":/" でシーン内の名前（エイリアス）を検索します
     rAnkle = sim.getObject(":/RAnkleJoint")
     rKnee  = sim.getObject(":/RKneeJoint")
     rHip   = sim.getObject(":/RHipJoint")
+    
+    -- グラフの自動セットアップ
+    -- もし "TorqueGraph" という名前のグラフがあれば、そこにデータを送ります
+    graphHandle = sim.getObject(":/TorqueGraph")
+    
+    -- ストリーム（データを入れる箱）を作成: 
+    -- 引数: グラフハンドル, ストリーム名, 単位, オプション, 色{R,G,B}
+    torqueStream = sim.addGraphStream(graphHandle, "Knee Torque", "N*m", 0, {1, 0, 0})
     
     timer = 0
 end
@@ -188,23 +196,29 @@ function sysCall_actuation()
     sim.setJointTargetPosition(rKnee, targetKnee)
     sim.setJointTargetPosition(rHip, targetHip)
 end
+
+function sysCall_sensing()
+    -- センシングフェーズでトルクを計測してグラフに追加
+    local torque = sim.getJointForce(rKnee)
+    sim.setGraphStreamValue(graphHandle, torqueStream, torque)
+end
 ```
 
 ---
 
-## 5. トルクをグラフで見る
-これが今回のメインです。各関節がどれくらい頑張っているかを可視化します。
+## 5. グラフの準備
+手動設定は大変なので、**空のグラフ** を作るだけでOKです。
 
 1.  **Add** > **Graph**
-2.  名前を `TorqueGraph` に変更。
-3.  Graphをダブルクリックまたはプロパティを開き、**Add new data stream to record** をクリック。
-4.  **Joint: torque** を選択。
-5.  **Object** で `RKneeJoint` を選択し、**Add**。
-6.  同様に `RHipJoint` や `RAnkleJoint` も追加。
-7.  リスト内の名前（`Data`）をわかりやすく `KneeTorque` などに変更（F2キー）。
+2.  名前を `TorqueGraph` に変更してください。
+3.  **これだけです！**（中身の設定はスクリプトが自動でやります）
 
 ### 実行
-再生ボタンを押すと、一本足のアバターがスクワットを繰り返します。
-グラフウィンドウに波形が表示され、**「深くしゃがんだ時にトルクが最大になる（負荷が高い）」** ことが数値で確認できるはずです。
+再生ボタンを押すと、立ち上がり動作とともにグラフウィンドウに「膝のトルク」が赤線で描画されます。
+（深く曲げている最初の1秒間が最もトルクが高く、立ち上がると下がっていく様子が見えるはずです）
+
+### 実行
+再生ボタンを押すと、一本足のアバターが座った状態からゆっくり立ち上がり、直立します。
+グラフウィンドウに波形が表示され、**「深くしゃがんでいる時（開始直後）にトルクが最大になり、立ち上がると下がっていく」** 様子が確認できるはずです。
 
 これで「転倒」を気にせず、存分に力学的な実験ができます！
