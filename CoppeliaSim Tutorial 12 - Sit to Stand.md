@@ -82,7 +82,7 @@ function sysCall_actuation()
     -- 足部固定モデルでは、常に足が全重さを支えるため、座っていても膝トルクが発生してしまいます。
     -- これを防ぐため、座っている間は骨盤に「上向きの力」を加えて、擬似的に椅子に体重を預けます。
     
-    local pelvisMass = 20.0 -- 骨盤の質量
+    local pelvisMass = 20.0 -- 椅子が支える骨盤の質量
     local g = 9.81
     local supportForce = 0
     
@@ -111,26 +111,32 @@ function sysCall_actuation()
     local standHip   = 0
 
     -- --- タイミング制御 ---
+    -- 重要: 離殿（Seat-off）は瞬間的なイベント！
+    -- 前傾中はまだ椅子に座っているので、supportForceは維持される。
+    -- 離殿の瞬間（Phase 2開始時）に突然supportForceが0になり、
+    -- 全体重が足部にかかるため、膝トルクが急激に増加する。
     
     if timer < 1.0 then
-        -- 【Phase 0】 安定化 (1秒間)
+        -- 【Phase 0】 安定化 (1秒間): 椅子に座って静止
         targetAnkle = sitAnkle
         targetKnee  = sitKnee
         targetHip   = sitHip
-        supportForce = pelvisMass * g -- 100%椅子が支える
+        supportForce = pelvisMass * g -- 椅子が骨盤を支える
         
     elseif timer < 2.5 then
         -- 【Phase 1】 前傾動作 (1.5秒かけてお辞儀)
-        -- 重心を前方へ移動させながら、徐々に椅子の支えを外していく（離殿準備）
+        -- まだ椅子に座っている！重心を前方へ移動させる準備動作。
         local ratio = (timer - 1.0) / 1.5
         targetAnkle = (1 - ratio) * sitAnkle + ratio * leanAnkle
         targetKnee  = (1 - ratio) * sitKnee  + ratio * leanKnee
         targetHip   = (1 - ratio) * sitHip   + ratio * leanHip
         
-        -- 荷重の移行: 椅子の支え(100%) → 足の支え(0%)
-        supportForce = (1.0 - ratio) * (pelvisMass * g)
+        -- 前傾中もまだ座っているので、支持力は維持
+        supportForce = pelvisMass * g
         
     elseif timer < 4.5 then
+        -- ★★★ ここが離殿（Seat-off）の瞬間！ ★★★
+        -- supportForce = 0 になり、全体重が突然足部にかかる
         -- 【Phase 2】 立ち上がり (2.0秒かけて伸展)
         -- 前傾した状態から一気に伸び上がる
         local ratio = (timer - 2.5) / 2.0
