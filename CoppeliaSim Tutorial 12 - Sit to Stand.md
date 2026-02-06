@@ -44,6 +44,18 @@ Tutorial 11では「足部固定（CKC）」モデルを作成し、転倒しな
 
 ---
 
+## 2.5 干渉対策（重要）
+
+股関節を深く曲げると、**「骨盤（Pelvis）」** と **「大腿（Thigh）」** が物理的に衝突し、動作がブロックされてしまう場合があります。これを防ぐため、身体パーツ同士の衝突判定を無効化します。
+
+1.  Scene Hierarchy で **`Pelvis`**, **`RThigh`**, **`LThigh`** をすべて選択します（Shift/Ctrlキーを使用）。
+2.  **Scene Object Properties** ダイアログを開きます。
+3.  **Common** (またはダイアログ上部) にある **Respondable** のチェックを **外して OFF** にします。
+    *   これにより、パーツ同士が重なっても物理的な反発力が生じず、スムーズに屈曲できるようになります。
+    *   （足部 `RFoot` など床と接地するパーツは Respondable ON のままにしてください）
+
+---
+
 ## 3. スクリプトの改良（Sit-to-Stand）
 
 立ち上がり動作をよりリアルにするため、`RFoot` のスクリプトを更新します。
@@ -103,7 +115,7 @@ function sysCall_actuation()
     -- 立ち上がるために体を前に倒す（お辞儀）。股関節を深く曲げ、足首も背屈させる。
     local leanAnkle = 30 * math.pi / 180
     local leanKnee  = -90 * math.pi / 180 -- 膝角度は維持
-    local leanHip   = 110 * math.pi / 180 -- さらに深く曲げる（お辞儀）
+    local leanHip   = 130 * math.pi / 180 -- さらに深く曲げる（動かない場合はJointのUpper Limitを確認）
     
     -- 直立姿勢： 全部0
     local standAnkle = 0
@@ -154,7 +166,7 @@ function sysCall_actuation()
     sim.setJointTargetPosition(rAnkle, targetAnkle)
     sim.setJointTargetPosition(rKnee, targetKnee)
     sim.setJointTargetPosition(rHip, targetHip)
-    
+
     -- 骨盤に上向きの力（椅子の反力）を加える
     -- 世界座標系のZ軸方向に力を加えます
     if supportForce > 0 then
