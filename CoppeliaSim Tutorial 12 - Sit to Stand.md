@@ -68,7 +68,6 @@ Tutorial 11では「足部固定（CKC）」モデルを作成し、転倒しな
 ### スクリプトの書き換え
 `RFoot` の子スクリプトを開き、中身を以下のように書き換えてください。
 
-```lua
 sim = require('sim')
 
 function sysCall_init()
@@ -90,10 +89,14 @@ function sysCall_actuation()
     dt = sim.getSimulationTimeStep()
     timer = timer + dt
     
+    -- --- 動作タイミングの設定（秒） ---
+    local t0 = 1.0  -- 動作開始（Lean開始）
+    local t1 = 1.5  -- ★離殿（Seat-off）＆ 立ち上がり開始
+                    -- ユーザー観測値に合わせて 1.5秒 に設定
+                    -- この時点で supportForce を 0 にし、Phase 2（Extension）へ移行します
+    local t2 = 3.5  -- 立ち上がり完了（直立）
+
     -- --- 仮想的な椅子の反力（Virtual Chair Reaction Force） ---
-    -- 足部固定モデルでは、常に足が全重さを支えるため、座っていても膝トルクが発生してしまいます。
-    -- これを防ぐため、座っている間は骨盤に「上向きの力」を加えて、擬似的に椅子に体重を預けます。
-    
     local pelvisMass = 20.0 -- 椅子が支える骨盤の質量
     local g = 9.81
     local supportForce = 0
@@ -105,17 +108,14 @@ function sysCall_actuation()
     -- --- 動作フェーズの設定 ---
     
     -- 初期位置（座位）：
-    -- 椅子に深く腰掛けている状態（Deep Seat）。
-    -- 下腿を垂直（0度）にすることで、骨盤を最深部（最も後方）に配置します。
-    local sitAnkle = 0 * math.pi / 180 -- 前方に倒さず、垂直をキープ
+    local sitAnkle = 0 * math.pi / 180
     local sitKnee  = -90 * math.pi / 180
     local sitHip   = 90 * math.pi / 180
     
     -- 前傾姿勢（離殿直前）：
-    -- 立ち上がるために体を前に倒す（お辞儀）。股関節を深く曲げ、足首も背屈させる。
     local leanAnkle = 30 * math.pi / 180
-    local leanKnee  = -90 * math.pi / 180 -- 膝角度は維持
-    local leanHip   = 130 * math.pi / 180 -- さらに深く曲げる（動かない場合はJointのUpper Limitを確認）
+    local leanKnee  = -90 * math.pi / 180
+    local leanHip   = 130 * math.pi / 180
     
     -- 直立姿勢： 全部0
     local standAnkle = 0
@@ -123,22 +123,19 @@ function sysCall_actuation()
     local standHip   = 0
 
     -- --- タイミング制御 ---
-    -- 重要: 離殿（Seat-off）は瞬間的なイベント！
-    -- 前傾中はまだ椅子に座っているので、supportForceは維持される。
-    -- 離殿の瞬間（Phase 2開始時）に突然supportForceが0になり、
-    -- 全体重が足部にかかるため、膝トルクが急激に増加する。
     
-    if timer < 1.0 then
-        -- 【Phase 0】 安定化 (1秒間): 椅子に座って静止
+    if timer < t0 then
+        -- 【Phase 0】 安定化: 椅子に座って静止
         targetAnkle = sitAnkle
         targetKnee  = sitKnee
         targetHip   = sitHip
-        supportForce = pelvisMass * g -- 椅子が骨盤を支える
+        supportForce = pelvisMass * g
         
-    elseif timer < 2.5 then
-        -- 【Phase 1】 前傾動作 (1.5秒かけてお辞儀)
-        -- まだ椅子に座っている！重心を前方へ移動させる準備動作。
-        local ratio = (timer - 1.0) / 1.5
+    elseif timer < t1 then
+        -- 【Phase 1】 前傾動作 (Lean)
+        -- t0(1.0s) 〜 t1(1.5s) の間で前傾
+        local duration = t1 - t0
+        local ratio = (timer - t0) / duration
         targetAnkle = (1 - ratio) * sitAnkle + ratio * leanAnkle
         targetKnee  = (1 - ratio) * sitKnee  + ratio * leanKnee
         targetHip   = (1 - ratio) * sitHip   + ratio * leanHip
@@ -146,15 +143,19 @@ function sysCall_actuation()
         -- 前傾中もまだ座っているので、支持力は維持
         supportForce = pelvisMass * g
         
-    elseif timer < 4.5 then
-        -- ★★★ ここが離殿（Seat-off）の瞬間！ ★★★
-        -- supportForce = 0 になり、全体重が突然足部にかかる
-        -- 【Phase 2】 立ち上がり (2.0秒かけて伸展)
-        -- 前傾した状態から一気に伸び上がる
-        local ratio = (timer - 2.5) / 2.0
+    elseif timer < t2 then
+        -- ★★★ ここが離殿（Seat-off）！ ★★★
+        -- timer >= t1 (1.5s) になると supportForce は 0 (デフォルト値) になります
+        
+        -- 【Phase 2】 立ち上がり (Extension)
+        -- t1(1.5s) 〜 t2(3.5s) の間で伸展
+        local duration = t2 - t1
+        local ratio = (timer - t1) / duration
         targetAnkle = (1 - ratio) * leanAnkle + ratio * standAnkle
         targetKnee  = (1 - ratio) * leanKnee  + ratio * standKnee
         targetHip   = (1 - ratio) * leanHip   + ratio * standHip
+        
+        -- supportForce = 0 （計算しない）
         
     else
         -- 【Phase 3】 直立保持
@@ -167,13 +168,11 @@ function sysCall_actuation()
     sim.setJointTargetPosition(rKnee, targetKnee)
     sim.setJointTargetPosition(rHip, targetHip)
 
-    -- 骨盤に上向きの力（椅子の反力）を加える
-    -- 世界座標系のZ軸方向に力を加えます
+    -- 椅子反力
     if supportForce > 0 then
         sim.addForceAndTorque(pelvis, {0, 0, supportForce})
     end
 end
-
 function sysCall_sensing()
     if graphHandle ~= -1 then
         local torque = sim.getJointForce(rKnee)
@@ -189,23 +188,23 @@ end
 再生ボタンを押してシミュレーションを開始します。
 
 ### 動作のチェックポイント
-1.  **0〜1秒**: 椅子に座って静止しているか？
-2.  **1〜2.5秒**: **「お辞儀」** をして、頭（骨盤）が前に出てくるか？
-    *   これが無いと、実際の人間なら後ろにひっくり返ってしまいます。
-3.  **2.5秒〜**: そのままスムーズに立ち上がり、直立するか？
+1.  **0〜1.0秒**: 椅子に座って静止しているか？
+2.  **1.0〜1.5秒**: **「お辞儀」** をして、重心を前方に移動させているか？
+    *   この期間は短くなりましたが、スムーズに重心移動ができているか確認します。
+3.  **1.5秒〜**: そのままスムーズに立ち上がり、直立するか？
+    *   ここが **「離殿（Seat-off）」** のタイミングです。
 
 ### トルクグラフの観察
 Tutorial 11同様、膝関節のトルク（Knee Torque）を観察してください。
 
-*   **前傾フェーズ（Phase 1）** でトルクはどう変化しましたか？
-*   立ち上がり開始直後と、直立完了時でトルクの違いはありますか？
-
-一般的には、**「離殿（お尻が浮く瞬間）」** に最大の力が必要になります。このシミュレーションでそのピークがどこに来るか確認しましょう。
+*   **離殿（1.5秒付近）** でトルクはどう変化しましたか？
+*   お尻の支え（supportForce）が消えた瞬間、グラフに急激な変化が見られるはずです。
 
 ---
 
 ## 5. （発展）椅子の高さやタイミングを変えてみる
 
+*   スクリプト内の `t1` (離殿タイミング) を調整して、最適なタイミングを探ってみてください。
 *   **椅子の高さ（Z座標）** を低くすると、立ち上がりはどうなりますか？
     *   より深い前傾が必要になるかもしれません。
 *   **動作スピード（秒数）** を速くすると、トルクは増えますか？
