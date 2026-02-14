@@ -111,6 +111,19 @@ Tutorial 12 のモデル（`sitToStand.ttt` など）を使用します。
 
 ## 2. スクリプトの修正（Physics Version）
 
+### 2-0. グラフの整理（古いデータの削除）
+前のTutorialのデータ（`Knee_Torque` など）がグラフに残っている場合、凡例が混ざって見にくくなります。
+スクリプトで自動削除するのは難しいため、手動で**全てのデータを一度リセット**することを推奨します。
+
+1.  Scene Hierarchy で **`TorqueGraph`** をダブルクリックします（またはプロパティを開きます）。
+2.  **Graph properties** ダイアログが開きます。
+3.  **Remove all streams/curves** ボタンをクリックします。
+    *   これで過去のデータが全て消えますが、問題ありません。
+4.  次回シミュレーション開始時に、スクリプトが自動的に新しいデータ（Physics付き）だけを作成・表示します。
+
+---
+
+### 2-1. スクリプトの書き換え
 物理的な椅子が支えてくれるため、スクリプトで「仮想反力（supportForce）」を計算する必要がなくなりました。
 シンプルになったスクリプトに書き換えます。
 
@@ -128,10 +141,26 @@ function sysCall_init()
     -- グラフ用
     graphHandle = sim.getObject(":/TorqueGraph")
     if graphHandle ~= -1 then
-        torqueStream = sim.addGraphStream(graphHandle, "Knee Torque (Physics)", "N*m", 0, {1, 0, 0})
+        -- 2つのグラフ（膝・股関節）を描画します
+        torqueStreamKnee = sim.addGraphStream(graphHandle, "Knee Torque (Physics)", "N*m", 0, {1, 0, 0}) -- 赤: 膝
+        torqueStreamHip  = sim.addGraphStream(graphHandle, "Hip Torque (Physics)",  "N*m", 0, {1, 1, 0}) -- 黄: 股関節
     end
     
+    
     timer = 0
+
+    -- CSV出力用のファイル作成
+    -- Macの場合: /Users/ユーザー名/Desktop/torque_data.csv に保存されます
+    -- Windowsの場合: C:/Users/ユーザー名/Desktop/torque_data.csv など
+    -- local desktopPath = sim.getStringParameter(sim.stringparam_desktop_directory) -- エラーの原因となるため削除（不要）
+    local specificPath = "/Users/aoyamahiroki/Desktop/torque_data.csv" -- ユーザー指定パス
+    fileHandle = io.open(specificPath, "w")
+    if fileHandle then
+        -- ヘッダー書き込み
+        fileHandle:write("Time,Knee_Torque,Hip_Torque\n")
+    else
+        print("Error: Could not open file for writing at " .. specificPath)
+    end
 end
 
 function sysCall_actuation()
@@ -157,7 +186,7 @@ function sysCall_actuation()
     -- ここが浅いと、お尻が持ち上がらず後ろに倒れます
     local leanAnkle = 40 * math.pi / 180  -- 足首を強く曲げる
     local leanKnee  = -100 * math.pi / 180 -- 膝も少し深く
-    local leanHip   = 140 * math.pi / 180 -- 体幹を大きく前へ（ユーザー実績値: 140度）
+    local leanHip   = 136 * math.pi / 180 -- 体幹を大きく前へ（ユーザー実績値: 136度）
     
     -- 直立姿勢：
     local standAnkle = 0
@@ -209,8 +238,25 @@ end
 
 function sysCall_sensing()
     if graphHandle ~= -1 then
-        local torque = sim.getJointForce(rKnee)
-        sim.setGraphStreamValue(graphHandle, torqueStream, torque)
+        local kneeTorque = sim.getJointForce(rKnee)
+        local hipTorque  = sim.getJointForce(rHip)
+        
+        sim.setGraphStreamValue(graphHandle, torqueStreamKnee, kneeTorque)
+        sim.setGraphStreamValue(graphHandle, torqueStreamHip, hipTorque)
+
+        -- CSV書き込み
+        if fileHandle then
+            -- Time, Knee, Hip の順で書き込み
+            fileHandle:write(string.format("%.3f,%.3f,%.3f\n", timer, kneeTorque, hipTorque))
+        end
+    end
+end
+
+function sysCall_cleanup()
+    -- シミュレーション終了時にファイルを閉じる
+    if fileHandle then
+        fileHandle:close()
+        print("CSV saved to /Users/aoyamahiroki/Desktop/torque_data.csv")
     end
 end
 ```
@@ -321,3 +367,57 @@ local leanHip = 138 * math.pi / 180  -- 140 → 138 に微調整
 「後ろにも前にも倒れない」スイートスポットを探します。
 
 > **推奨順序**: ① → ② → ③ → ④ の順に試してください。①だけで解決することが多いです。
+
+---
+
+## 6. グラフの読み方と解釈（Graph Interpretation）
+
+シミュレーションを実行すると、グラフに2本の線が表示されます。
+
+### 6-1. 膝関節伸展トルク（赤色）
+`Knee Torque (Physics)`
+
+*   **(Physics) とついている意味**:
+    *   これは「物理エンジン（NewtonDynamics/Bullet等）」が計算した **実際の反力・負荷** です。
+    *   **※注意**: もしグラフに `Knee_Torque`（Physicsなし）が表示されている場合、それは以前のチュートリアル設定が残っているものです。今回は不要ですので、無視するか、グラフ設定から削除してください。
+
+*   **座る動作（Start〜1.0s）**:
+    *   大きなピーク（約 **70 N·m** 前後）が見られます。
+    *   これは、お辞儀（前傾）をせずに座ろうとしたため、重心が後方にあり、膝に強いブレーキ力（遠心性収縮）が必要だったことを示します。前傾制御を入れていないため「ドスン」と着座する衝撃的な力が記録されています。
+*   **立ち上がり動作（2.0s〜4.0s）**:
+    *   ピーク値は **40 N·m** 程度と、座る時より低くなります。
+    *   これは、深く前傾（Lean）してから立ち上がったため、重心が膝に近く（モーメントアームが短く）、効率的に力が発揮できたことを意味します。
+
+### 6-2. 股関節伸展トルク（黄色）
+`Hip Torque (Physics)`
+
+*   **前傾〜立ち上がり（1.0s〜4.0s）**:
+    *   上半身（HATモデル）は体重の約68%を占めるため、これを持ち上げる股関節にも相応のトルクが発生します。
+    *   お辞儀（前傾）をする際、上体の重さを支えるためにグラフが上昇します。
+    *   膝と同様に、重心制御が適切であればトルクを低く抑えられます。
+
+### 6-3. 値の解釈まとめ
+「座る時の方がトルクが大きい（70Nm > 40Nm）」という現象は、**「座る動作の方が（予備動作なしのため）物理的に負荷が高かった」** と解釈できます。人間の筋肉の特性（遠心性収縮の方が強い力を出せる）とも合致しますが、主な要因は「姿勢（重心位置）の違い」によるものです。
+
+---
+
+## 7. データのCSV出力（Data Export）
+
+シミュレーション結果（時間、膝トルク、股関節トルク）をExcel等で解析するために、CSVファイルとして自動保存する機能を追加しました。
+
+### 7-1. 保存場所
+*   **パス**: `/Users/aoyamahiroki/Desktop/torque_data.csv`
+*   スクリプト内でこのパスを指定しています。
+
+### 7-2. 使い方と仕様
+1.  通常通りシミュレーションを **Start** します。
+2.  動作が完了したら（約4.0秒後）、シミュレーションを **Stop** します。
+3.  デスクトップを確認すると `torque_data.csv` が生成されています。
+4.  ExcelやPython等で開くと、以下の形式でデータが記録されています：
+    *   **サンプリング周波数**: デフォルト設定では **20Hz**（0.05秒間隔）です。
+    ```csv
+    Time,Knee_Torque,Hip_Torque
+    0.050,12.345,5.678
+    0.100,15.678,8.901
+    ...
+    ```
