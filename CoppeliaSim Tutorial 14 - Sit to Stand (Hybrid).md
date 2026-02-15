@@ -146,20 +146,17 @@ function sysCall_init()
     rAnkle = sim.getObject(":/RAnkleJoint")
     rKnee  = sim.getObject(":/RKneeJoint")
     rHip   = sim.getObject(":/RHipJoint")
-    
-    -- Get Pelvis handle for applying force
     pelvis = sim.getObject(":/Pelvis")
 
     -- Graph setup
     graphHandle = sim.getObject(":/TorqueGraph")
     if graphHandle ~= -1 then
-        torqueStreamKnee = sim.addGraphStream(graphHandle, "Knee Torque (Physics)", "N*m", 0, {1, 0, 0}) -- Red: Knee
-        torqueStreamHip  = sim.addGraphStream(graphHandle, "Hip Torque (Physics)",  "N*m", 0, {1, 1, 0}) -- Yellow: Hip
+        torqueStreamKnee = sim.addGraphStream(graphHandle, "Knee Torque (Physics)", "N*m", 0, {1, 0, 0})
+        torqueStreamHip  = sim.addGraphStream(graphHandle, "Hip Torque (Physics)",  "N*m", 0, {1, 1, 0})
     end
     
     timer = 0
 
-    -- CSV Export
     local specificPath = "/Users/aoyamahiroki/Desktop/torque_data.csv"
     fileHandle = io.open(specificPath, "w")
     if fileHandle then
@@ -173,76 +170,57 @@ function sysCall_actuation()
     dt = sim.getSimulationTimeStep()
     timer = timer + dt
     
-    -- --- Timing Settings (seconds) ---
-    local t0 = 1.0  -- Start (Sit -> Lean)
-    local t1 = 2.0  -- Lean -> Stand
-    local t2 = 4.0  -- Stand Complete
-    local t3 = 6.0  -- Start Sitting Down (Stand -> Lean)
-    local t4 = 8.0  -- Sit Complete (Lean -> Sit)
-
+    -- --- Timing Settings (Stand to Sit) ---
+    local t0 = 1.0  -- Start (Stand -> Lean)
+    local t1 = 3.0  -- Lean -> Sit (Start Sitting Down)
+    local t2 = 5.0  -- Sit Complete
+    
     -- --- Phase Angles ---
     
-    -- Initial Position (Sitting)
-    local sitAnkle = 0 * math.pi / 180
-    local sitKnee  = -90 * math.pi / 180
-    local sitHip   = 90 * math.pi / 180
-    
-    -- Leaning Position
-    local leanAnkle = 25 * math.pi / 180  -- 浅めの足首 (Assisted)
-    local leanKnee  = -100 * math.pi / 180 
-    local leanHip   = 120 * math.pi / 180 -- 浅めの前傾 (Assisted)
-    
-    -- Standing Position
+    -- Standing Position (Start)
     local standAnkle = 0
     local standKnee  = 0
     local standHip   = 0
 
+    -- Leaning Position
+    local leanAnkle = 20 * math.pi / 180
+    local leanKnee  = -20 * math.pi / 180  -- Slightly bent
+    local leanHip   = 45 * math.pi / 180   -- Slight lean
+    
+    -- Sitting Position (End)
+    local sitAnkle = 0 * math.pi / 180      -- Neutral
+    local sitKnee  = -90 * math.pi / 180    -- 90 deg flexion
+    local sitHip   = 90 * math.pi / 180     -- 90 deg flexion
+
     -- --- Control Calculation ---
-    local targetAnkle = sitAnkle
-    local targetKnee  = sitKnee
-    local targetHip   = sitHip
+    local targetAnkle = standAnkle
+    local targetKnee  = standKnee
+    local targetHip   = standHip
 
     if timer < t0 then
-        -- [Phase 0] Stabilization
-        targetAnkle = sitAnkle
-        targetKnee  = sitKnee
-        targetHip   = sitHip
-        
-    elseif timer < t1 then
-        -- [Phase 1] Sit -> Lean
-        local duration = t1 - t0
-        local ratio = (timer - t0) / duration
-        targetAnkle = (1 - ratio) * sitAnkle + ratio * leanAnkle
-        targetKnee  = (1 - ratio) * sitKnee  + ratio * leanKnee
-        targetHip   = (1 - ratio) * sitHip   + ratio * leanHip
-        
-    elseif timer < t2 then
-        -- [Phase 2] Lean -> Stand
-        local duration = t2 - t1
-        local ratio = (timer - t1) / duration
-        targetAnkle = (1 - ratio) * leanAnkle + ratio * standAnkle
-        targetKnee  = (1 - ratio) * leanKnee  + ratio * standKnee
-        targetHip   = (1 - ratio) * leanHip   + ratio * standHip
-        
-    elseif timer < t3 then
-        -- [Phase 3] Standing Maintain
+        -- [Phase 0] Stand Still
         targetAnkle = standAnkle
         targetKnee  = standKnee
         targetHip   = standHip
-
-    elseif timer < t4 then
-        -- [Phase 4] Stand -> Sit (Reverse)
-        -- ゆっくりと元の座り姿勢に戻ります
-        local duration = t4 - t3
-        local ratio = (timer - t3) / duration
         
-        -- 逆再生: Stand -> Lean -> Sit (途中省略で直接Sitへ戻る簡易版)
-        targetAnkle = (1 - ratio) * standAnkle + ratio * sitAnkle
-        targetKnee  = (1 - ratio) * standKnee  + ratio * sitKnee
-        targetHip   = (1 - ratio) * standHip   + ratio * sitHip
+    elseif timer < t1 then
+        -- [Phase 1] Stand -> Lean (Forward Weight Shift)
+        local duration = t1 - t0
+        local ratio = (timer - t0) / duration
+        targetAnkle = (1 - ratio) * standAnkle + ratio * leanAnkle
+        targetKnee  = (1 - ratio) * standKnee  + ratio * leanKnee
+        targetHip   = (1 - ratio) * standHip   + ratio * leanHip
+        
+    elseif timer < t2 then
+        -- [Phase 2] Lean -> Sit (Descending)
+        local duration = t2 - t1
+        local ratio = (timer - t1) / duration
+        targetAnkle = (1 - ratio) * leanAnkle + ratio * sitAnkle
+        targetKnee  = (1 - ratio) * leanKnee  + ratio * sitKnee
+        targetHip   = (1 - ratio) * leanHip   + ratio * sitHip
         
     else
-        -- [Phase 5] Sit Complete
+        -- [Phase 3] Sit Complete
         targetAnkle = sitAnkle
         targetKnee  = sitKnee
         targetHip   = sitHip
@@ -252,23 +230,14 @@ function sysCall_actuation()
     sim.setJointTargetPosition(rKnee, targetKnee)
     sim.setJointTargetPosition(rHip, targetHip)
 
-    -- === Hybrid Assist Control ===
+    -- === Cushion Force (Stand to Sit) ===
     
-    -- 1. Standing Assist (立ち上がり補助)
-    if timer >= t0 and timer <= t2 then
-        -- 上方向への持ち上げ
-        local force = {10, 0, 150} 
-        sim.addForceAndTorque(pelvis, force, {0,0,0})
-    end
-
-    -- 2. Sitting Cushion (着座ブレーキ)
-    -- ここが「ドスン」を防ぐ重要ポイントです
-    if timer >= t3 and timer <= t4 then
+    -- Apply during the descent phase (Phase 2)
+    if timer >= t1 and timer <= t2 then
         
-        -- 重力（下向き）に逆らう強い上向きの力（ブレーキ）を加えます
-        -- 体重の約60-80%程度 (350N - 450N)
-        -- これが無いと自由落下に近い状態で椅子に衝突します
-        local cushionForce = {0, 0, 350} 
+        -- Upward force to cushion the landing
+        -- Adjust Z value (e.g. 350-450N) to control sitting speed
+        local cushionForce = {0, 0, 400} 
         
         sim.addForceAndTorque(pelvis, cushionForce, {0,0,0})
     end
@@ -278,10 +247,8 @@ function sysCall_sensing()
     if graphHandle ~= -1 then
         local kneeTorque = sim.getJointForce(rKnee)
         local hipTorque  = sim.getJointForce(rHip)
-        
         sim.setGraphStreamValue(graphHandle, torqueStreamKnee, kneeTorque)
         sim.setGraphStreamValue(graphHandle, torqueStreamHip, hipTorque)
-
         if fileHandle then
             fileHandle:write(string.format("%.3f,%.3f,%.3f\n", timer, kneeTorque, hipTorque))
         end
