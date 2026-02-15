@@ -36,52 +36,176 @@ Tutorial 13 で作成した `sitToStand_physics.ttt` をベースにします。
 ---
 
 ## 3. スクリプトの実装
-
 `RFoot` の子スクリプトを開き、以下のように修正・追記します。
-`sysCall_init` で `Pelvis` オブジェクトを取得し、`sysCall_sensing`（または `actuation`）で力を加えます。
-
-### 3-1. オブジェクトの取得
-`sim.getObject` で `Pelvis` ハンドルを取得します。
+**「直立 → 着座 → 立ち上がり（Stand -> Sit -> Stand）」** の一連の動作を行います。
 
 ```lua
+sim = require('sim')
+
 function sysCall_init()
-    -- ... (既存のコード) ...
+    rAnkle = sim.getObject(":/RAnkleJoint")
+    rKnee  = sim.getObject(":/RKneeJoint")
     rHip   = sim.getObject(":/RHipJoint")
     
-    -- 【追加】力を加える対象（骨盤）を取得
+    -- Get Pelvis handle for applying force
     pelvis = sim.getObject(":/Pelvis")
+
+    -- Graph setup
+    graphHandle = sim.getObject(":/TorqueGraph")
+    if graphHandle ~= -1 then
+        torqueStreamKnee = sim.addGraphStream(graphHandle, "Knee Torque (Physics)", "N*m", 0, {1, 0, 0}) -- Red: Knee
+        torqueStreamHip  = sim.addGraphStream(graphHandle, "Hip Torque (Physics)",  "N*m", 0, {1, 1, 0}) -- Yellow: Hip
+    end
     
-    -- ... (グラフ・CSV設定など) ...
+    timer = 0
+
+    -- CSV Export
+    local specificPath = "/Users/aoyamahiroki/Desktop/torque_data.csv"
+    fileHandle = io.open(specificPath, "w")
+    if fileHandle then
+        fileHandle:write("Time,Knee_Torque,Hip_Torque\n")
+    else
+        print("Error: Could not open file for writing at " .. specificPath)
+    end
 end
-```
 
-### 3-2. アシスト力の実装
-
-`sysCall_sensing` 内ではなく、**`sysCall_actuation` の最後** に実装するのが最も効果的です。
-
-```lua
 function sysCall_actuation()
-    -- ... (既存の角度計算・関節制御など) ...
-    -- sim.setJointTargetPosition(...) のあと
+    dt = sim.getSimulationTimeStep()
+    timer = timer + dt
     
-    -- === Assist Force Control (Tutorial 14) ===
+    -- --- Timing Settings ---
+    -- Sequence: Stand -> Sit -> Stand
+    local t0 = 1.0  -- Start (Stand -> Lean)
+    local t1 = 3.0  -- Lean -> Sit (Start Sitting Down)
+    local t2 = 5.0  -- Sit Complete (Rest)
+    local t3 = 6.0  -- Start Standing (Sit -> Lean)
+    local t4 = 8.0  -- Stand Complete (Lean -> Stand)
     
-    -- 力を加えるタイミング: Phase 1 (前傾) 〜 Phase 2 (伸展)
-    if timer >= t0 and timer <= t2 then
+    -- --- Phase Angles ---
+    
+    -- Standing Position
+    local standAnkle = 0
+    local standKnee  = 0
+    local standHip   = 0
+
+    -- Leaning Position (Assisted)
+    local leanAnkle = 20 * math.pi / 180
+    local leanKnee  = -20 * math.pi / 180
+    local leanHip   = 45 * math.pi / 180   -- Slight lean for balance
+    
+    -- Deep Lean (for Standing Up)
+    local deepLeanAnkle = 25 * math.pi / 180
+    local deepLeanKnee  = -100 * math.pi / 180 
+    local deepLeanHip   = 120 * math.pi / 180 
+    
+    -- Sitting Position
+    local sitAnkle = 0 * math.pi / 180
+    local sitKnee  = -90 * math.pi / 180
+    local sitHip   = 90 * math.pi / 180
+
+    -- --- Control Calculation ---
+    local targetAnkle = standAnkle
+    local targetKnee  = standKnee
+    local targetHip   = standHip
+
+    if timer < t0 then
+        -- [Phase 0] Stand Still (Start)
+        targetAnkle = standAnkle
+        targetKnee  = standKnee
+        targetHip   = standHip
         
-        -- アシスト力のベクトル (World座標系)
-        -- X方向: 前に押し出す力 (例: 30N)
-        -- Z方向: 上に持ち上げる力 (例: 150N, 体重の約25%)
-        local force = {30, 0, 150} 
+    elseif timer < t1 then
+        -- [Phase 1] Stand -> Lean (Forward Weight Shift)
+        local duration = t1 - t0
+        local ratio = (timer - t0) / duration
+        targetAnkle = (1 - ratio) * standAnkle + ratio * leanAnkle
+        targetKnee  = (1 - ratio) * standKnee  + ratio * leanKnee
+        targetHip   = (1 - ratio) * standHip   + ratio * leanHip
         
-        -- トルクは加えない (回転は関節に任せる)
-        local torque = {0, 0, 0}
+    elseif timer < t2 then
+        -- [Phase 2] Lean -> Sit (Descending)
+        local duration = t2 - t1
+        local ratio = (timer - t1) / duration
+        targetAnkle = (1 - ratio) * leanAnkle + ratio * sitAnkle
+        targetKnee  = (1 - ratio) * leanKnee  + ratio * sitKnee
+        targetHip   = (1 - ratio) * leanHip   + ratio * sitHip
         
-        -- 力を適用 (重心位置に作用)
-        sim.addForceAndTorque(pelvis, force, torque)
+    elseif timer < t3 then
+        -- [Phase 3] Sit Rest
+        targetAnkle = sitAnkle
+        targetKnee  = sitKnee
+        targetHip   = sitHip
         
-        -- ※ デバッグ用: 力を加えている間、コンソールに表示
-        -- print(string.format("Assisting... Time: %.2f", timer))
+    elseif timer < t4 then
+        -- [Phase 4] Sit -> Stand (Standing Up)
+        -- Combine Lean and Extension for smooth motion
+        local duration = t4 - t3
+        local ratio = (timer - t3) / duration
+        
+        -- Simplified trajectory: Sit -> DeepLean -> Stand
+        if ratio < 0.5 then
+            -- First half: Sit -> DeepLean
+            local subRatio = ratio * 2
+            targetAnkle = (1 - subRatio) * sitAnkle + subRatio * deepLeanAnkle
+            targetKnee  = (1 - subRatio) * sitKnee  + subRatio * deepLeanKnee
+            targetHip   = (1 - subRatio) * sitHip   + subRatio * deepLeanHip
+        else
+            -- Second half: DeepLean -> Stand
+            local subRatio = (ratio - 0.5) * 2
+            targetAnkle = (1 - subRatio) * deepLeanAnkle + subRatio * standAnkle
+            targetKnee  = (1 - subRatio) * deepLeanKnee  + subRatio * standKnee
+            targetHip   = (1 - subRatio) * deepLeanHip   + subRatio * standHip
+        end
+
+    else
+        -- [Phase 5] Stand Complete
+        targetAnkle = standAnkle
+        targetKnee  = standKnee
+        targetHip   = standHip
+    end
+    
+    sim.setJointTargetPosition(rAnkle, targetAnkle)
+    sim.setJointTargetPosition(rKnee, targetKnee)
+    sim.setJointTargetPosition(rHip, targetHip)
+
+    -- === Hybrid Assist Control ===
+    
+    -- 1. Sitting Cushion (着座ブレーキ)
+    -- Phase 2: Stand -> Sit の時にブレーキをかけるで、「ドスン」を防ぐ
+    if timer >= t1 and timer <= t2 then
+        -- 体重(約600N)の約70%程度の強い上向きの力を加える
+        local cushionForce = {0, 0, 400} 
+        sim.addForceAndTorque(pelvis, cushionForce, {0,0,0})
+    end
+
+    -- 2. Standing Assist (立ち上がり補助)
+    -- Phase 4: Sit -> Stand の時に持ち上げる
+    if timer >= t3 and timer <= t4 then
+        -- 体重の約25%程度のアシストで楽に立つ
+        local assistForce = {10, 0, 150} 
+        sim.addForceAndTorque(pelvis, assistForce, {0,0,0})
+    end
+end
+
+function sysCall_sensing()
+    if graphHandle ~= -1 then
+        local kneeTorque = sim.getJointForce(rKnee)
+        local hipTorque  = sim.getJointForce(rHip)
+        
+        sim.setGraphStreamValue(graphHandle, torqueStreamKnee, kneeTorque)
+        sim.setGraphStreamValue(graphHandle, torqueStreamHip, hipTorque)
+
+        -- CSV Write
+        if fileHandle then
+            fileHandle:write(string.format("%.3f,%.3f,%.3f\n", timer, kneeTorque, hipTorque))
+        end
+    end
+end
+
+function sysCall_cleanup()
+    if fileHandle then
+        fileHandle:close()
+        print("CSV saved to /Users/aoyamahiroki/Desktop/torque_data.csv")
     end
 end
 ```
@@ -126,139 +250,4 @@ Tutorial 13 (Physics only) と比較して：
 2.  **成功率**: 何回やっても安定して立てるか？
 3.  **関節トルク**: グラフ（赤線・黄線）のピーク値が下がっているか確認してください。アシスト力が負荷の一部を肩代わりしているため、ロボット自身の負担（必要トルク）は減るはずです。
 
-
-これが必要ですが、**「人間と機械（アシスト）の協調動作」** のシミュレーション成功です！
-
----
-
-## 6. 着座動作の実装 (Stand-to-Sit)
-
-立ち上がりだけでなく、**「座る動作」** もスムーズに行います。
-何も制御しないと、重力に負けて「ドスン」と椅子に落ちてしまいます。これもアシスト力（ブレーキ）で解決します。
-
-### 6-1. スクリプトの全容（Stand-to-Sit 追加版）
-以下のスクリプトに置き換えてください。`Phase 3` 以降に「座る動作」を追加しています。
-
-```lua
-sim = require('sim')
-
-function sysCall_init()
-    rAnkle = sim.getObject(":/RAnkleJoint")
-    rKnee  = sim.getObject(":/RKneeJoint")
-    rHip   = sim.getObject(":/RHipJoint")
-    pelvis = sim.getObject(":/Pelvis")
-
-    -- Graph setup
-    graphHandle = sim.getObject(":/TorqueGraph")
-    if graphHandle ~= -1 then
-        torqueStreamKnee = sim.addGraphStream(graphHandle, "Knee Torque (Physics)", "N*m", 0, {1, 0, 0})
-        torqueStreamHip  = sim.addGraphStream(graphHandle, "Hip Torque (Physics)",  "N*m", 0, {1, 1, 0})
-    end
-    
-    timer = 0
-
-    local specificPath = "/Users/aoyamahiroki/Desktop/torque_data.csv"
-    fileHandle = io.open(specificPath, "w")
-    if fileHandle then
-        fileHandle:write("Time,Knee_Torque,Hip_Torque\n")
-    else
-        print("Error: Could not open file for writing at " .. specificPath)
-    end
-end
-
-function sysCall_actuation()
-    dt = sim.getSimulationTimeStep()
-    timer = timer + dt
-    
-    -- --- Timing Settings (Stand to Sit) ---
-    local t0 = 1.0  -- Start (Stand -> Lean)
-    local t1 = 3.0  -- Lean -> Sit (Start Sitting Down)
-    local t2 = 5.0  -- Sit Complete
-    
-    -- --- Phase Angles ---
-    
-    -- Standing Position (Start)
-    local standAnkle = 0
-    local standKnee  = 0
-    local standHip   = 0
-
-    -- Leaning Position
-    local leanAnkle = 20 * math.pi / 180
-    local leanKnee  = -20 * math.pi / 180  -- Slightly bent
-    local leanHip   = 45 * math.pi / 180   -- Slight lean
-    
-    -- Sitting Position (End)
-    local sitAnkle = 0 * math.pi / 180      -- Neutral
-    local sitKnee  = -90 * math.pi / 180    -- 90 deg flexion
-    local sitHip   = 90 * math.pi / 180     -- 90 deg flexion
-
-    -- --- Control Calculation ---
-    local targetAnkle = standAnkle
-    local targetKnee  = standKnee
-    local targetHip   = standHip
-
-    if timer < t0 then
-        -- [Phase 0] Stand Still
-        targetAnkle = standAnkle
-        targetKnee  = standKnee
-        targetHip   = standHip
-        
-    elseif timer < t1 then
-        -- [Phase 1] Stand -> Lean (Forward Weight Shift)
-        local duration = t1 - t0
-        local ratio = (timer - t0) / duration
-        targetAnkle = (1 - ratio) * standAnkle + ratio * leanAnkle
-        targetKnee  = (1 - ratio) * standKnee  + ratio * leanKnee
-        targetHip   = (1 - ratio) * standHip   + ratio * leanHip
-        
-    elseif timer < t2 then
-        -- [Phase 2] Lean -> Sit (Descending)
-        local duration = t2 - t1
-        local ratio = (timer - t1) / duration
-        targetAnkle = (1 - ratio) * leanAnkle + ratio * sitAnkle
-        targetKnee  = (1 - ratio) * leanKnee  + ratio * sitKnee
-        targetHip   = (1 - ratio) * leanHip   + ratio * sitHip
-        
-    else
-        -- [Phase 3] Sit Complete
-        targetAnkle = sitAnkle
-        targetKnee  = sitKnee
-        targetHip   = sitHip
-    end
-    
-    sim.setJointTargetPosition(rAnkle, targetAnkle)
-    sim.setJointTargetPosition(rKnee, targetKnee)
-    sim.setJointTargetPosition(rHip, targetHip)
-
-    -- === Cushion Force (Stand to Sit) ===
-    
-    -- Apply during the descent phase (Phase 2)
-    if timer >= t1 and timer <= t2 then
-        
-        -- Upward force to cushion the landing
-        -- Adjust Z value (e.g. 350-450N) to control sitting speed
-        local cushionForce = {0, 0, 400} 
-        
-        sim.addForceAndTorque(pelvis, cushionForce, {0,0,0})
-    end
-end
-
-function sysCall_sensing()
-    if graphHandle ~= -1 then
-        local kneeTorque = sim.getJointForce(rKnee)
-        local hipTorque  = sim.getJointForce(rHip)
-        sim.setGraphStreamValue(graphHandle, torqueStreamKnee, kneeTorque)
-        sim.setGraphStreamValue(graphHandle, torqueStreamHip, hipTorque)
-        if fileHandle then
-            fileHandle:write(string.format("%.3f,%.3f,%.3f\n", timer, kneeTorque, hipTorque))
-        end
-    end
-end
-
-function sysCall_cleanup()
-    if fileHandle then
-        fileHandle:close()
-        print("CSV saved.")
-    end
-end
-```
+これが確認できれば、**「人間と機械（アシスト）の協調動作」** のシミュレーション成功です！
