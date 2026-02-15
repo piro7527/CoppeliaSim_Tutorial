@@ -32,6 +32,7 @@ Tutorial 13 で作成した `sitToStand_physics.ttt` をベースにします。
 *   **方向**: 重力に逆らう「上方向(+Z)」と、重心を前に送る「前方向(+X)」の合成ベクトル
 *   **大きさ**: 体重（約60kg = 600N）の全てを支えるのではなく、**20〜30%程度**（120N〜180N）を補助します。残りの70%は自身の脚力（関節トルク）で支えます。
 *   **タイミング**: 動作中のみ（Phase 1 〜 Phase 2）加えます。
+*   **追加補正**: 開始から約0.7秒後に着座衝撃（ドスン）が発生するため、その直前にも上方向の力を加えて衝撃を緩和します。
 
 ---
 
@@ -75,11 +76,11 @@ function sysCall_actuation()
     
     -- --- Timing Settings ---
     -- Sequence: Stand -> Sit -> Stand
-    local t0 = 1.0  -- Start (Stand -> Lean)
-    local t1 = 3.0  -- Lean -> Sit (Start Sitting Down)
-    local t2 = 5.0  -- Sit Complete (Rest)
-    local t3 = 6.0  -- Start Standing (Sit -> Lean)
-    local t4 = 8.0  -- Stand Complete (Lean -> Stand)
+    local t0 = 1.0  -- Start (Stand -> Crouch)
+    local t1 = 2.0  -- Crouch -> Sit (Start Sitting Down)
+    local t2 = 4.0  -- Sit Complete (Rest)
+    local t3 = 5.5  -- Start Standing (Sit -> Lean)
+    local t4 = 7.5  -- Stand Complete (Lean -> Stand)
     
     -- --- Phase Angles ---
     
@@ -88,10 +89,10 @@ function sysCall_actuation()
     local standKnee  = 0
     local standHip   = 0
 
-    -- Leaning Position (Assisted)
+    -- Leaning Position (Crouch / Bow)
     local leanAnkle = 20 * math.pi / 180
-    local leanKnee  = -20 * math.pi / 180
-    local leanHip   = 45 * math.pi / 180   -- Slight lean for balance
+    local leanKnee  = -50 * math.pi / 180  -- Deeper Knee Bend
+    local leanHip   = 45 * math.pi / 180   -- Deep Bow (45 deg) as requested
     
     -- Deep Lean (for Standing Up)
     local deepLeanAnkle = 25 * math.pi / 180
@@ -100,8 +101,8 @@ function sysCall_actuation()
     
     -- Sitting Position
     local sitAnkle = 0 * math.pi / 180
-    local sitKnee  = -90 * math.pi / 180
-    local sitHip   = 90 * math.pi / 180
+    local sitKnee  = -85 * math.pi / 180 -- User optimized for 0.45m chair
+    local sitHip   = 95 * math.pi / 180  -- User optimized for stability
 
     -- --- Control Calculation ---
     local targetAnkle = standAnkle
@@ -169,19 +170,26 @@ function sysCall_actuation()
     sim.setJointTargetPosition(rHip, targetHip)
 
     -- === Hybrid Assist Control ===
+
+    -- 0. Initial Cushion (0.5s -> 1.0s)
+    -- Apply strong but less than full weight force to allow descent but cushion impact
+    if timer > 0.5 and timer < 1.0 then
+        local initialCushion = {0, 0, 40} -- Reduced to 40N (Still allows falling, but softer)
+        sim.addForceAndTorque(pelvis, initialCushion, {0,0,0})
+    end
     
-    -- 1. Sitting Cushion (着座ブレーキ)
-    -- Phase 2: Stand -> Sit の時にブレーキをかけるで、「ドスン」を防ぐ
-    if timer >= t1 and timer <= t2 then
-        -- 体重(約600N)の約70%程度の強い上向きの力を加える
-        local cushionForce = {0, 0, 400} 
+    -- 1. Sitting Cushion (Braking)
+    -- Phase 2: Stand -> Sit, apply brake ONLY at the end of descent (last 0.8s)
+    if timer >= (t2 - 0.8) and timer <= t2 then
+        -- Apply moderate upward force (approx. 30% of body weight, ~200N)
+        local cushionForce = {0, 0, 200} 
         sim.addForceAndTorque(pelvis, cushionForce, {0,0,0})
     end
 
-    -- 2. Standing Assist (立ち上がり補助)
-    -- Phase 4: Sit -> Stand の時に持ち上げる
+    -- 2. Standing Assist
+    -- Phase 4: Sit -> Stand, lift up
     if timer >= t3 and timer <= t4 then
-        -- 体重の約25%程度のアシストで楽に立つ
+        -- Assist with approx. 25% of body weight to stand easily
         local assistForce = {10, 0, 150} 
         sim.addForceAndTorque(pelvis, assistForce, {0,0,0})
     end
@@ -237,7 +245,7 @@ end
 もし「前につんのめる」場合は、アシスト力を減らすのではなく、**前傾角度（leanHip）を浅く** してみてください。
 
 ```lua
-local leanHip = 120 * math.pi / 180 -- Tutorial 13 (136度) より浅くてOK！
+local leanHip = 120 * math.pi / 180 -- Shallower than Tutorial 13 (136 deg) is OK!
 ```
 これにより、**「極端なお辞儀をせず、スマートにスッと立つ」** という、より自然な人間らしい動作が実現できます。これがハイブリッド制御の真のメリットです。
 
