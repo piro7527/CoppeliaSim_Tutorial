@@ -84,6 +84,20 @@ function sysCall_init()
         tend = 0.52           -- End timing (s)
     }
     
+    -------------------------------------------------
+    -- PELVIS KINEMATICS LIMITS (Comfortable Walking)
+    -------------------------------------------------
+    -- Pitch (Sagittal plane / X-axis rotation): approx. 4°
+    limitPitch = 4 * math.pi / 180
+    -- Roll (Frontal plane / Y-axis rotation): approx. 4-5°
+    limitRoll  = 4.5 * math.pi / 180
+    -- Yaw (Transverse plane / Z-axis rotation): approx. 8° total -> 4° each side
+    limitYaw   = 4 * math.pi / 180
+    
+    -- PD control gains for maintaining posture
+    Kp_ang = 0.5   -- Proportional gain (Spring component. Set very low to avoid instability)
+    Kd_ang = 0.5   -- Derivative gain (Damper component. Increased to suppress oscillations)
+    
     -- Delay before starting the pattern (for observation)
     patternDelay = 2.0
     
@@ -107,6 +121,46 @@ end
 function sysCall_actuation()
     local t = sim.getSimulationTime()
     
+    -------------------------------------------------
+    -- APPLY KINEMATIC LIMITS (Angle constraints)
+    -------------------------------------------------
+    local euler = sim.getObjectOrientation(pelvisHandle, -1)
+    local linVel, angVel = sim.getObjectVelocity(pelvisHandle)
+    
+    local torqueX = 0 -- Pitch torque
+    local torqueY = 0 -- Roll torque
+    local torqueZ = 0 -- Yaw torque
+    
+    -- X-axis (Pitch) limit check
+    if euler[1] > limitPitch then
+        torqueX = -Kp_ang * (euler[1] - limitPitch)
+    elseif euler[1] < -limitPitch then
+        torqueX = -Kp_ang * (euler[1] + limitPitch)
+    end
+    torqueX = torqueX - Kd_ang * angVel[1]
+    
+    -- Y-axis (Roll) limit check
+    if euler[2] > limitRoll then
+        torqueY = -Kp_ang * (euler[2] - limitRoll)
+    elseif euler[2] < -limitRoll then
+        torqueY = -Kp_ang * (euler[2] + limitRoll)
+    end
+    torqueY = torqueY - Kd_ang * angVel[2]
+    
+    -- Z-axis (Yaw) limit check
+    if euler[3] > limitYaw then
+        torqueZ = -Kp_ang * (euler[3] - limitYaw)
+    elseif euler[3] < -limitYaw then
+        torqueZ = -Kp_ang * (euler[3] + limitYaw)
+    end
+    torqueZ = torqueZ - Kd_ang * angVel[3]
+    
+    -- Apply posture restricting torque to the pelvis
+    sim.addForceAndTorque(pelvisHandle, {0, 0, 0}, {torqueX, torqueY, torqueZ})
+    
+    -------------------------------------------------
+    -- APPLY ASSISTIVE FORCES
+    -------------------------------------------------
     -- Wait for delay period
     if t < patternDelay then
         return
@@ -193,6 +247,20 @@ end
 | LH Fwd | `{0.1, 0, 0}` | `{0, forceFwd, 0}` | 右側で前向き（Y方向） |
 
 > 💡 **右側を選んだ理由**: 骨盤の右側（X = +0.1）に力を加えることで、理学療法士が右手で骨盤を支える動作を再現します。
+
+### 2.4 骨盤運動の角度制限（快適歩行の目安）
+
+> 💡 **補足（制限の方法について）**: 今回の制限は、体幹と骨盤を物理的に繋ぐ「Pelvis Joint（関節）」に対する可動域制限（Joint limit）の設定ではありません。骨盤オブジェクト自体の空間に対する絶対的な傾きに対して、スクリプトから仮想的な弱いバネの力（トルク）を与えて姿勢が過度に崩れるのを防ぐアプローチをとっています。
+
+理学療法士の介助により過度な姿勢の崩れを防ぐため、歩行中の骨盤運動の目安（快適歩行）に基づく角度制限を設けています（PD制御による仮想的なダンパー・スプリング効果）。
+
+| 面・軸            | 動きの種類       | 目安の角度           | 制御（片側）              |
+| ----------------- | ---------------- | -------------------- | ------------------------- |
+| 矢状面（X軸回転） | 前後傾（Pitch）  | 約4°（振れ幅）       | ±4°を越えたら復元トルク   |
+| 前額面（Y軸回転） | 側方傾斜（Roll） | 約4〜5°              | ±4.5°を越えたら復元トルク |
+| 水平面（Z軸回転） | 回旋（Yaw）      | 約8°前後（左右合計） | ±4°を越えたら復元トルク   |
+
+角度限界を超えると、バネ効果（`Kp_ang`）による引き戻し力と、振動を抑えるダンピング効果（`Kd_ang`）による安定化トルクが与えられ、姿勢が実際の歩行に近い範囲に保たれます。強すぎる力で骨盤の挙動が暴れるのを防ぐため、バネ力はごくわずかに設定しています。
 
 ---
 
