@@ -33,18 +33,18 @@ function sysCall_init()
     -------------------------------------------------
     -- SWING PHASE TORQUE PARAMETERS (Right Leg)
     -------------------------------------------------
-    -- 1. 開始時の物理的なセットアップ（股関節を伸展位＝-20度に強力にロック）
+    -- 1. 開始時の物理的なセットアップ（股関節を伸展位＝-15度に強力にロック）
     -- 姿勢が崩れないよう、最初の待機時間中は「物理エンジンの純正モーター」をONにし、
-    -- さらに最大トルクを極端に大きくして -20度 の位置でキープします。
+    -- さらに最大トルクを極端に大きくして -15度 の位置でキープします。
     rHipJointHandle = sim.getObject('/Trunk/PelvisJoint/Pelvis/RHip')
     sim.setObjectInt32Parameter(rHipJointHandle, sim.jointintparam_motor_enabled, 1)
     sim.setObjectInt32Parameter(rHipJointHandle, sim.jointintparam_ctrl_enabled, 1)
-    sim.setJointTargetPosition(rHipJointHandle, -20 * math.pi / 180)
+    sim.setJointTargetPosition(rHipJointHandle, -15 * math.pi / 180)
     -- 脚全体の重さに負けて揺れないよう、モーターの出す最大力を超強力（1000）にセット
     sim.setJointTargetForce(rHipJointHandle, 1000)
     -- 2. 初期姿勢（Toe-off）を維持するための保持トルク
     -- 遊脚期の時間（膝関節が完全に伸び切る0.54秒間をスイングフェーズとする）
-    swingDuration = 0.54
+    swingDuration = 0.5
     
     -- [Hip] 太もも（RThigh）を回転させる（持ち上げる）ためのトルク
     -- 遊脚相全体（swingDuration）のうち、前方向に振り上げ続ける時間の割合（0.0 〜 1.0）
@@ -149,7 +149,7 @@ function sysCall_actuation()
         -- 待機時間（2秒未満）は、RHipの純正モーターをONにして維持しつつ、
         -- 物理エンジン特有の「重さによるたわみ・揺れ」を完全に防ぐため、
         -- 毎フレーム強制的に角度を上書き（キネマティック固定）します。
-        sim.setJointPosition(rHipJointHandle, -20 * math.pi / 180)
+        sim.setJointPosition(rHipJointHandle, -15 * math.pi / 180)
     else
         -- 2秒経過した瞬間（1回だけ実行）に、RHipのモーターをOFFにして「完全な脱力（Free）」にします
         -- また、それまで空中固定していた骨盤（Pelvis）の「静的」設定を解除し、自然な動きに戻します。
