@@ -34,7 +34,7 @@ function sysCall_init()
     
     -- [Hip] 太もも（RThigh）を回転させる（持ち上げる）ためのトルク
     -- X軸周り（Pitch）の直接的な回転力。質量に対して非常に敏感です。
-    peakHipFlexTorque = 20.0   -- 屈曲（前振り） ※初期位置が後ろになった分、大きめの前振り力が必要
+    peakHipFlexTorque = 50.0   -- 屈曲（前振り） ※初期位置が後ろになった分、大きめの前振り力が必要
     peakHipExtTorque  = 10.0   -- 伸展（ブレーキ）
     
     -- [Knee] スネ（RShank）を回転させる（曲げる）ためのトルク
@@ -113,25 +113,24 @@ function sysCall_actuation()
         sim.setJointPosition(rHipJointHandle, -20 * math.pi / 180)
     else
         -- 2秒経過した瞬間（1回だけ実行）に、RHipのモーターをOFFにして「完全な脱力（Free）」にします
-        -- また、それまで空中固定していた骨盤（Pelvis）の「静的」設定を解除し、
-        -- 再び物理エンジンでの重力・姿勢制御（動的）の対象に戻します。
+        -- 骨盤（Pelvis）の静止設定は解除せず、最後まで空中固定のままで純粋な脚の動きを観察します。
         if not swingStarted then
-            sim.setObjectInt32Parameter(pelvisHandle, sim.shapeintparam_static, 0)
             sim.setObjectInt32Parameter(rHipJointHandle, sim.jointintparam_motor_enabled, 0)
             swingStarted = true
-            print("--- Swing Phase Started! (Pelvis & Motor freed, applying Torques) ---")
+            print("--- Swing Phase Started! (Applying Torques, Pelvis remains static) ---")
         end
         
         local tRel = t - patternDelay
         
         -- 1. Hipのトルク計算（前半：屈曲、後半：伸展ブレーキ）
+        -- ★絶対座標のX軸回転において、プラス回転（+X）が「前方への振り出し（Hip Flexion）」になります。
         local hipFlexPhase = swingDuration * 0.6
         if tRel <= hipFlexPhase then
-            hipTorqueX = -calculateTorqueValue(tRel, hipFlexPhase, peakHipFlexTorque) -- マイナスで前方向回転
+            hipTorqueX = calculateTorqueValue(tRel, hipFlexPhase, peakHipFlexTorque) -- プラスで前方向回転
         elseif tRel <= swingDuration then
             local tBrake = tRel - hipFlexPhase
             local hipExtPhase = swingDuration - hipFlexPhase
-            hipTorqueX = calculateTorqueValue(tBrake, hipExtPhase, peakHipExtTorque)  -- プラスで後ろ方向回転
+            hipTorqueX = -calculateTorqueValue(tBrake, hipExtPhase, peakHipExtTorque)  -- マイナスで後ろ方向回転（ブレーキ）
         end
         
         -- 2. Kneeのトルク計算（前半：屈曲クリアランス、後半：伸展で着地準備）
@@ -145,11 +144,11 @@ function sysCall_actuation()
             
             local kneeFlexPhase = kneeActiveDuration * 0.4
             if tRelKnee <= kneeFlexPhase then
-                kneeTorqueX = calculateTorqueValue(tRelKnee, kneeFlexPhase, peakKneeFlexTorque)  -- プラスで膝を曲げる
+                kneeTorqueX = -calculateTorqueValue(tRelKnee, kneeFlexPhase, peakKneeFlexTorque)  -- マイナスで膝を後ろに曲げる
             elseif tRelKnee <= kneeActiveDuration then
                 local tExt = tRelKnee - kneeFlexPhase
                 local kneeExtPhase = kneeActiveDuration - kneeFlexPhase
-                kneeTorqueX = -calculateTorqueValue(tExt, kneeExtPhase, peakKneeExtTorque) -- マイナスで膝を伸ばす
+                kneeTorqueX = calculateTorqueValue(tExt, kneeExtPhase, peakKneeExtTorque) -- プラスで膝を前に伸ばす
             end
         end
         
