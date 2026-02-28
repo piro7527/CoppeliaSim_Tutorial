@@ -40,11 +40,17 @@ function sysCall_init()
     peakKneeFlexTorque = 4.0  -- 屈曲（曲げる）
     peakKneeExtTorque  = 4.0  -- 伸展（伸ばす）
     
-    -- [Ankle] 足首（RFoot）を中間位（約90度、相対0度）で強固に固定するためのフラグ
-    -- 今回は力学的なバネ（ビヨンビヨンする）ではなく、
-    -- 姿勢自体を強制的にロック（キネマティック固定）して下垂足を完全に防ぎます。
-    lockAnklePosition = true
+    -- [Ankle] 足首（RFoot）を中間位で強固に固定する
+    -- スクリプトからの力学的なバネ（ビヨンビヨンする）や、毎フレームの上書きではなく、
+    -- 物理エンジンの純正モーター機能（位置制御）をONにして完全に0度（中間位）にロックします。
     rAnkleJointHandle = sim.getObject('/Trunk/PelvisJoint/Pelvis/RHip/RThigh/RKnee/RShank/RAnkle')
+    
+    -- モーターを有効化
+    sim.setObjectInt32Parameter(rAnkleJointHandle, sim.jointintparam_motor_enabled, 1)
+    -- モーターのコントロールループ（位置制御モード）を有効化
+    sim.setObjectInt32Parameter(rAnkleJointHandle, sim.jointintparam_ctrl_enabled, 1)
+    -- 目標角度を 0度（中間位） に設定
+    sim.setJointTargetPosition(rAnkleJointHandle, 0)
     
     -------------------------------------------------
     -- PELVIS KINEMATICS LIMITS (Tutorial 9 から継続)
@@ -136,12 +142,7 @@ function sysCall_actuation()
     -------------------------------------------------
     -- APPLY KINEMATIC LIMITS TO ANKLE (下垂足の完全防止)
     -------------------------------------------------
-    -- バネ（Torque）で支えようとすると足先の軽い質量に対してPIDゲイン調整が難しく、
-    -- 振動（ピョンピョン）や重力負け（底屈）が発生しやすくなります。
-    -- そのため、遊脚中は「関節の角度自体を0度（中間位）に強制上書き」して物理的にロックします。
-    if lockAnklePosition then
-        sim.setJointPosition(rAnkleJointHandle, 0)
-    end
+    -- 物理エンジンの内部モーターを使って0度にロックしているので、Luaからの毎フレームの角度上書きは不要です。
     
     -------------------------------------------------
     -- AUTO-STOP SIMULATION
