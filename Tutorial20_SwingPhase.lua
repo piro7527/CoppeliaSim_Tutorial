@@ -34,14 +34,16 @@ function sysCall_init()
     
     -- [Hip] 太もも（RThigh）を回転させる（持ち上げる）ためのトルク
     -- X軸周り（Pitch）の直接的な回転力。質量に対して非常に敏感です。
-    peakHipFlexTorque = 8.0   -- 屈曲（前振り） ※初期位置が後ろになった分、大きめの前振り力が必要
+    peakHipFlexTorque = 7.0   -- 屈曲（前振り） ※初期位置が後ろになった分、大きめの前振り力が必要
     peakHipExtTorque  = 5.0   -- 伸展（ブレーキ）
     
     -- [Knee] スネ（RShank）を回転させる（曲げる）ためのトルク
     -- 遊脚開始から少し遅らせて膝を曲げ始めることで「股関節から先に動く」自然なスイングになります。
     kneeFlexionDelay = 0.1   -- 遊脚開始から膝を曲げ始めるまでの遅延時間（秒）
-    peakKneeFlexTorque = 5.0  -- 屈曲（曲げる）
-    peakKneeExtTorque  = 5.0  -- 伸展（伸ばす）
+    peakKneeFlexTorque = 4.0  -- 屈曲（曲げる）
+    peakKneeExtTorque  = 0.1  -- 伸展（伸ばす）
+    peakKneeBrakeTorque = 10.0 -- ⭐️追加：遊脚終期の「膝振り切り（衝撃）」を抑えるための強力なブレーキ（屈曲方向の力）
+    
     
     -- [Ankle] 足首（RFoot）を中間位で強固に固定する
     -- スクリプトからの力学的なバネ（ビヨンビヨンする）や、毎フレームの上書きではなく、
@@ -134,7 +136,7 @@ function sysCall_actuation()
             hipTorqueX = -calculateTorqueValue(tBrake, hipExtPhase, peakHipExtTorque)  -- マイナスで後ろ方向回転（ブレーキ）
         end
         
-        -- 2. Kneeのトルク計算（前半：屈曲クリアランス、後半：伸展で着地準備）
+        -- 2. Kneeのトルク計算（前半：屈曲クリアランス、中盤：伸展で前へ、終盤：ブレーキで衝撃吸収）
         -- 指定した遅延時間（kneeFlexionDelay）が経過するまでは膝に力を入れません
         if tRel <= kneeFlexionDelay then
             kneeTorqueX = 0
@@ -143,13 +145,21 @@ function sysCall_actuation()
             local kneeActiveDuration = swingDuration - kneeFlexionDelay
             local tRelKnee = tRel - kneeFlexionDelay
             
-            local kneeFlexPhase = kneeActiveDuration * 0.4
+            local kneeFlexPhase = kneeActiveDuration * 0.3        -- 最初30%で膝を曲げてクリアランス
+            local kneeExtPhase  = kneeActiveDuration * 0.4        -- 次の40%で前にスネを振り出す
+            local kneeBrakePhase= kneeActiveDuration * 0.3        -- 最後の30%で強力なブレーキ（屈曲方向）をかけて衝撃吸収
+            
             if tRelKnee <= kneeFlexPhase then
-                kneeTorqueX = -calculateTorqueValue(tRelKnee, kneeFlexPhase, peakKneeFlexTorque)  -- マイナスで膝を後ろに曲げる
-            elseif tRelKnee <= kneeActiveDuration then
+                -- 屈曲（持ち上げる）
+                kneeTorqueX = -calculateTorqueValue(tRelKnee, kneeFlexPhase, peakKneeFlexTorque)
+            elseif tRelKnee <= (kneeFlexPhase + kneeExtPhase) then
+                -- 伸展（前に振り出す）
                 local tExt = tRelKnee - kneeFlexPhase
-                local kneeExtPhase = kneeActiveDuration - kneeFlexPhase
-                kneeTorqueX = calculateTorqueValue(tExt, kneeExtPhase, peakKneeExtTorque) -- プラスで膝を前に伸ばす
+                kneeTorqueX = calculateTorqueValue(tExt, kneeExtPhase, peakKneeExtTorque)
+            elseif tRelKnee <= kneeActiveDuration then
+                -- ⭐️ブレーキ（前に行き過ぎないように後ろに引っ張る＝屈曲方向の強い力で衝撃を殺す）
+                local tBrake = tRelKnee - (kneeFlexPhase + kneeExtPhase)
+                kneeTorqueX = -calculateTorqueValue(tBrake, kneeBrakePhase, peakKneeBrakeTorque)
             end
         end
         
