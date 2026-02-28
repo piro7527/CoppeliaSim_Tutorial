@@ -164,15 +164,15 @@ function sysCall_actuation()
         local hipTorqueX = 0
         local kneeTorqueX = 0
         
-        -- 1. Hipのトルク計算（前半：屈曲、後半：伸展ブレーキ）
+        -- 1. Hipのトルク計算（屈曲のみ）
         -- ★絶対座標のX軸回転において、プラス回転（+X）が「前方への振り出し（Hip Flexion）」になります。
         local hipFlexPhase = swingDuration * hipFlexPhaseRatio
         if tRel <= hipFlexPhase then
             hipTorqueX = calculateTorqueValue(tRel, hipFlexPhase, peakHipFlexTorque) -- プラスで前方向回転
-        elseif tRel <= swingDuration then
-            local tBrake = tRel - hipFlexPhase
-            local hipExtPhase = swingDuration - hipFlexPhase
-            hipTorqueX = -calculateTorqueValue(tBrake, hipExtPhase, peakHipExtTorque)  -- マイナスで後ろ方向回転（ブレーキ）
+        else
+            -- 振り出しが終わった後は、後ろに引き戻す（伸展させる）のではなく、
+            -- トルクを0にして慣性と重力だけで自然に脚を前方に放り出させます。
+            hipTorqueX = 0
         end
         
         -- 2. Kneeのトルク計算（前半：屈曲クリアランス、中盤：伸展で前へ、終盤：ブレーキで衝撃吸収）
