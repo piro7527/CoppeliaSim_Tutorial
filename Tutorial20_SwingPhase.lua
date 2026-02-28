@@ -43,8 +43,8 @@ function sysCall_init()
     -- 脚全体の重さに負けて揺れないよう、モーターの出す最大力を超強力（1000）にセット
     sim.setJointTargetForce(rHipJointHandle, 1000)
     -- 2. 初期姿勢（Toe-off）を維持するための保持トルク
-    -- 遊脚期の時間
-    swingDuration = 0.7
+    -- 遊脚期の時間（膝関節が完全に伸び切る0.54秒間をスイングフェーズとする）
+    swingDuration = 0.54
     
     -- [Hip] 太もも（RThigh）を回転させる（持ち上げる）ためのトルク
     -- 遊脚相全体（swingDuration）のうち、前方向に振り上げ続ける時間の割合（0.0 〜 1.0）
