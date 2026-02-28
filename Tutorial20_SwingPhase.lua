@@ -9,6 +9,7 @@ function sysCall_init()
     -- トルクを加える対象の「骨格（Shape）」を取得
     rThighHandle = sim.getObject('/Trunk/PelvisJoint/Pelvis/RHip/RThigh')
     rShankHandle = sim.getObject('/Trunk/PelvisJoint/Pelvis/RHip/RThigh/RKnee/RShank')
+    rFootHandle = sim.getObject('/Trunk/PelvisJoint/Pelvis/RHip/RThigh/RKnee/RShank/RAnkle/RFoot')
     
     -- 重力モードの有効化（正常歩行の遊脚相は重力を利用した振り子運動です）
     sim.setArrayParameter(sim.arrayparam_gravity, {0, 0, -9.81})
@@ -32,12 +33,17 @@ function sysCall_init()
     
     -- [Hip] 太もも（RThigh）を回転させる（持ち上げる）ためのトルク
     -- X軸周り（Pitch）の直接的な回転力。質量に対して非常に敏感です。
-    peakHipFlexTorque = 8.0   -- 屈曲（前振り） ※初期位置が後ろになった分、大きめの前振り力が必要
-    peakHipExtTorque  = 4.0   -- 伸展（ブレーキ）
+    peakHipFlexTorque = 10.0   -- 屈曲（前振り） ※初期位置が後ろになった分、大きめの前振り力が必要
+    peakHipExtTorque  = 6.0   -- 伸展（ブレーキ）
     
     -- [Knee] スネ（RShank）を回転させる（曲げる）ためのトルク
-    peakKneeFlexTorque = 2.0  -- 屈曲（曲げる）
-    peakKneeExtTorque  = 2.0  -- 伸展（伸ばす）
+    peakKneeFlexTorque = 4.0  -- 屈曲（曲げる）
+    peakKneeExtTorque  = 4.0  -- 伸展（伸ばす）
+    
+    -- [Ankle] 足首（RFoot）を中間位で保持するためのバネ係数(PD制御)
+    -- 下垂足（つま先が垂れ下がる）を防止します
+    Kp_ankle = 1.0
+    Kd_ankle = 0.1
     
     -------------------------------------------------
     -- PELVIS KINEMATICS LIMITS (Tutorial 9 から継続)
@@ -125,6 +131,20 @@ function sysCall_actuation()
     
     -- スネ部分をPitch軸（X軸）を中心に曲げる
     sim.addForceAndTorque(rShankHandle, {0, 0, 0}, {kneeTorqueX, 0, 0})
+    
+    -------------------------------------------------
+    -- APPLY KINEMATIC LIMITS TO ANKLE (下垂足の防止)
+    -------------------------------------------------
+    -- RFoot の RShank に対する相対的な角度（オイラー角）を取得
+    local footEuler = sim.getObjectOrientation(rFootHandle, rShankHandle)
+    local linVel, footAngVel = sim.getObjectVelocity(rFootHandle)
+    
+    -- 0度（初期の中間位）に戻ろうとするバネの力（P制御）と、
+    -- 揺れを抑えるダンパーの力（D制御）を計算します。
+    local ankleTorqueX = -Kp_ankle * footEuler[1] - Kd_ankle * footAngVel[1]
+    
+    -- 足部（RFoot）をPitch軸（X軸）を中心に持ち上げる
+    sim.addForceAndTorque(rFootHandle, {0, 0, 0}, {ankleTorqueX, 0, 0})
     
     -------------------------------------------------
     -- AUTO-STOP SIMULATION
