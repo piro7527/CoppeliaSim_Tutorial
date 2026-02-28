@@ -40,10 +40,11 @@ function sysCall_init()
     peakKneeFlexTorque = 4.0  -- 屈曲（曲げる）
     peakKneeExtTorque  = 4.0  -- 伸展（伸ばす）
     
-    -- [Ankle] 足首（RFoot）を中間位で保持するためのバネ係数(PD制御)
-    -- 下垂足（つま先が垂れ下がる）を防止します
-    Kp_ankle = 1.0
-    Kd_ankle = 0.1
+    -- [Ankle] 足首（RFoot）を中間位（約90度、相対0度）で強固に固定するためのフラグ
+    -- 今回は力学的なバネ（ビヨンビヨンする）ではなく、
+    -- 姿勢自体を強制的にロック（キネマティック固定）して下垂足を完全に防ぎます。
+    lockAnklePosition = true
+    rAnkleJointHandle = sim.getObject('/Trunk/PelvisJoint/Pelvis/RHip/RThigh/RKnee/RShank/RAnkle')
     
     -------------------------------------------------
     -- PELVIS KINEMATICS LIMITS (Tutorial 9 から継続)
@@ -133,18 +134,14 @@ function sysCall_actuation()
     sim.addForceAndTorque(rShankHandle, {0, 0, 0}, {kneeTorqueX, 0, 0})
     
     -------------------------------------------------
-    -- APPLY KINEMATIC LIMITS TO ANKLE (下垂足の防止)
+    -- APPLY KINEMATIC LIMITS TO ANKLE (下垂足の完全防止)
     -------------------------------------------------
-    -- RFoot の RShank に対する相対的な角度（オイラー角）を取得
-    local footEuler = sim.getObjectOrientation(rFootHandle, rShankHandle)
-    local linVel, footAngVel = sim.getObjectVelocity(rFootHandle)
-    
-    -- 0度（初期の中間位）に戻ろうとするバネの力（P制御）と、
-    -- 揺れを抑えるダンパーの力（D制御）を計算します。
-    local ankleTorqueX = -Kp_ankle * footEuler[1] - Kd_ankle * footAngVel[1]
-    
-    -- 足部（RFoot）をPitch軸（X軸）を中心に持ち上げる
-    sim.addForceAndTorque(rFootHandle, {0, 0, 0}, {ankleTorqueX, 0, 0})
+    -- バネ（Torque）で支えようとすると足先の軽い質量に対してPIDゲイン調整が難しく、
+    -- 振動（ピョンピョン）や重力負け（底屈）が発生しやすくなります。
+    -- そのため、遊脚中は「関節の角度自体を0度（中間位）に強制上書き」して物理的にロックします。
+    if lockAnklePosition then
+        sim.setJointPosition(rAnkleJointHandle, 0)
+    end
     
     -------------------------------------------------
     -- AUTO-STOP SIMULATION
