@@ -17,21 +17,27 @@ function sysCall_init()
     -------------------------------------------------
     -- SWING PHASE TORQUE PARAMETERS (Right Leg)
     -------------------------------------------------
-    -- 初期姿勢（Toe-off）を維持するための保持トルク
-    -- 後ろ側（伸展方向）に脚を引っ張り上げておく力
-    initialHipExtHoldTorque = 1.0 
+    -- 1. 開始時の物理的なセットアップ（股関節を伸展位＝-15度に強制配置）
+    -- ※本来関節モードはFreeですが、開始の一瞬だけ位置を直接書き換えることでToe-off姿勢を作ります
+    rHipJointHandle = sim.getObject('/Trunk/PelvisJoint/Pelvis/RHip')
+    sim.setJointPosition(rHipJointHandle, -15 * math.pi / 180)
+    
+    -- 2. 初期姿勢（Toe-off）を維持するための保持トルク
+    -- 後ろ側（伸展方向）に脚を引っ張り上げておく力。
+    -- 位置を強制セットしても待機中にだらんと落ちてしまうのを防ぐ強めのトルク
+    initialHipExtHoldTorque = 3.0 
     
     -- 遊脚期の時間
     swingDuration = 0.5
     
     -- [Hip] 太もも（RThigh）を回転させる（持ち上げる）ためのトルク
     -- X軸周り（Pitch）の直接的な回転力。質量に対して非常に敏感です。
-    peakHipFlexTorque = 2.0   -- 屈曲（前振り） ※初期位置が後ろになった分、大きめの前振り力が必要かも
-    peakHipExtTorque  = 1.0   -- 伸展（ブレーキ）
+    peakHipFlexTorque = 8.0   -- 屈曲（前振り） ※初期位置が後ろになった分、大きめの前振り力が必要
+    peakHipExtTorque  = 4.0   -- 伸展（ブレーキ）
     
     -- [Knee] スネ（RShank）を回転させる（曲げる）ためのトルク
-    peakKneeFlexTorque = 0.5  -- 屈曲（曲げる）
-    peakKneeExtTorque  = 0.5  -- 伸展（伸ばす）
+    peakKneeFlexTorque = 2.0  -- 屈曲（曲げる）
+    peakKneeExtTorque  = 2.0  -- 伸展（伸ばす）
     
     -------------------------------------------------
     -- PELVIS KINEMATICS LIMITS (Tutorial 9 から継続)
@@ -114,9 +120,6 @@ function sysCall_actuation()
         end
     end
     
-    -- Shapeに対して直接トルクを印加
-    -- {0, 0, 0} は力のベクトル（今回は純粋な回転力なのでゼロ）
-    -- {torqueX, torqueY, torqueZ} は回転させるトルクベクトル
     -- 太もも全体をPitch軸（X軸）を中心に持ち上げる
     sim.addForceAndTorque(rThighHandle, {0, 0, 0}, {hipTorqueX, 0, 0})
     
