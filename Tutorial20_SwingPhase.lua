@@ -11,9 +11,10 @@ function sysCall_init()
     rShankHandle = sim.getObject('/Trunk/PelvisJoint/Pelvis/RHip/RThigh/RKnee/RShank')
     rFootHandle = sim.getObject('/Trunk/PelvisJoint/Pelvis/RHip/RThigh/RKnee/RShank/RAnkle/RFoot')
     
-    -- 重力モードの有効化（正常歩行の遊脚相は重力を利用した振り子運動です）
-    sim.setArrayParameter(sim.arrayparam_gravity, {0, 0, -9.81})
-    print("Standard Gravity Mode: ON (-9.81, Focus: Right Leg)")
+    -- 0. 開始時の物理的なセットアップ（骨盤自体の完全固定）
+    -- 遊脚開始を待つ間、重心変化によって骨盤全体（Pelvis）がゆらゆら揺れるのを防ぐため、
+    -- 最初の2秒間だけ、骨盤の質量計算を「静的（重さ無限大の固定物）」にして空中に完全固定します。
+    sim.setObjectInt32Parameter(pelvisHandle, sim.shapeintparam_static, 1)
     
     -------------------------------------------------
     -- SWING PHASE TORQUE PARAMETERS (Right Leg)
@@ -110,10 +111,13 @@ function sysCall_actuation()
         sim.setJointPosition(rHipJointHandle, -20 * math.pi / 180)
     else
         -- 2秒経過した瞬間（1回だけ実行）に、RHipのモーターをOFFにして「完全な脱力（Free）」にします
+        -- また、それまで空中固定していた骨盤（Pelvis）の「静的」設定を解除し、
+        -- 再び物理エンジンでの重力・姿勢制御（動的）の対象に戻します。
         if not swingStarted then
+            sim.setObjectInt32Parameter(pelvisHandle, sim.shapeintparam_static, 0)
             sim.setObjectInt32Parameter(rHipJointHandle, sim.jointintparam_motor_enabled, 0)
             swingStarted = true
-            print("--- Swing Phase Started! (Motor freed, applying Torques) ---")
+            print("--- Swing Phase Started! (Pelvis & Motor freed, applying Torques) ---")
         end
         
         local tRel = t - patternDelay
