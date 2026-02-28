@@ -33,6 +33,10 @@ function sysCall_init()
     swingDuration = 0.5
     
     -- [Hip] 太もも（RThigh）を回転させる（持ち上げる）ためのトルク
+    -- 遊脚相全体（swingDuration）のうち、前方向に振り上げ続ける時間の割合（0.0 〜 1.0）
+    -- この割合を増やすと、前振りの時間が長くなり、ブレーキ（伸展）の時間が短くなります。
+    hipFlexPhaseRatio = 0.8
+    
     -- X軸周り（Pitch）の直接的な回転力。質量に対して非常に敏感です。
     peakHipFlexTorque = 7.0   -- 屈曲（前振り） ※初期位置が後ろになった分、大きめの前振り力が必要
     peakHipExtTorque  = 5.0   -- 伸展（ブレーキ）
@@ -42,7 +46,7 @@ function sysCall_init()
     kneeFlexionDelay = 0.1   -- 遊脚開始から膝を曲げ始めるまでの遅延時間（秒）
     peakKneeFlexTorque = 4.0  -- 屈曲（曲げる）
     peakKneeExtTorque  = 0.1  -- 伸展（伸ばす）
-    peakKneeBrakeTorque = 10.0 -- ⭐️追加：遊脚終期の「膝振り切り（衝撃）」を抑えるための強力なブレーキ（屈曲方向の力）
+    peakKneeBrakeTorque = 11.0 -- ⭐️追加：遊脚終期の「膝振り切り（衝撃）」を抑えるための強力なブレーキ（屈曲方向の力）
     
     
     -- [Ankle] 足首（RFoot）を中間位で強固に固定する
@@ -127,7 +131,7 @@ function sysCall_actuation()
         
         -- 1. Hipのトルク計算（前半：屈曲、後半：伸展ブレーキ）
         -- ★絶対座標のX軸回転において、プラス回転（+X）が「前方への振り出し（Hip Flexion）」になります。
-        local hipFlexPhase = swingDuration * 0.6
+        local hipFlexPhase = swingDuration * hipFlexPhaseRatio
         if tRel <= hipFlexPhase then
             hipTorqueX = calculateTorqueValue(tRel, hipFlexPhase, peakHipFlexTorque) -- プラスで前方向回転
         elseif tRel <= swingDuration then
