@@ -34,14 +34,14 @@ function sysCall_init()
     
     -- [Hip] 太もも（RThigh）を回転させる（持ち上げる）ためのトルク
     -- X軸周り（Pitch）の直接的な回転力。質量に対して非常に敏感です。
-    peakHipFlexTorque = 50.0   -- 屈曲（前振り） ※初期位置が後ろになった分、大きめの前振り力が必要
-    peakHipExtTorque  = 10.0   -- 伸展（ブレーキ）
+    peakHipFlexTorque = 8.0   -- 屈曲（前振り） ※初期位置が後ろになった分、大きめの前振り力が必要
+    peakHipExtTorque  = 5.0   -- 伸展（ブレーキ）
     
     -- [Knee] スネ（RShank）を回転させる（曲げる）ためのトルク
     -- 遊脚開始から少し遅らせて膝を曲げ始めることで「股関節から先に動く」自然なスイングになります。
     kneeFlexionDelay = 0.1   -- 遊脚開始から膝を曲げ始めるまでの遅延時間（秒）
-    peakKneeFlexTorque = 10.0  -- 屈曲（曲げる）
-    peakKneeExtTorque  = 10.0  -- 伸展（伸ばす）
+    peakKneeFlexTorque = 5.0  -- 屈曲（曲げる）
+    peakKneeExtTorque  = 5.0  -- 伸展（伸ばす）
     
     -- [Ankle] 足首（RFoot）を中間位で強固に固定する
     -- スクリプトからの力学的なバネ（ビヨンビヨンする）や、毎フレームの上書きではなく、
@@ -113,11 +113,12 @@ function sysCall_actuation()
         sim.setJointPosition(rHipJointHandle, -20 * math.pi / 180)
     else
         -- 2秒経過した瞬間（1回だけ実行）に、RHipのモーターをOFFにして「完全な脱力（Free）」にします
-        -- 骨盤（Pelvis）の静止設定は解除せず、最後まで空中固定のままで純粋な脚の動きを観察します。
+        -- また、それまで空中固定していた骨盤（Pelvis）の「静的」設定を解除し、自然な動きに戻します。
         if not swingStarted then
+            sim.setObjectInt32Parameter(pelvisHandle, sim.shapeintparam_static, 0)
             sim.setObjectInt32Parameter(rHipJointHandle, sim.jointintparam_motor_enabled, 0)
             swingStarted = true
-            print("--- Swing Phase Started! (Applying Torques, Pelvis remains static) ---")
+            print("--- Swing Phase Started! (Pelvis & Motor freed, applying Torques) ---")
         end
         
         local tRel = t - patternDelay
