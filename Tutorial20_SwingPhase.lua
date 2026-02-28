@@ -18,13 +18,15 @@ function sysCall_init()
     -------------------------------------------------
     -- SWING PHASE TORQUE PARAMETERS (Right Leg)
     -------------------------------------------------
-    -- 1. 開始時の物理的なセットアップ（股関節を伸展位＝-15度に強力にロック）
-    -- 姿勢が崩れないよう、最初の待機時間中は「物理エンジンの純正モーター」をONにして
-    -- ガチガチに -15度 の位置でキープします。
+    -- 1. 開始時の物理的なセットアップ（股関節を伸展位＝-20度に強力にロック）
+    -- 姿勢が崩れないよう、最初の待機時間中は「物理エンジンの純正モーター」をONにし、
+    -- さらに最大トルクを極端に大きくして -20度 の位置でキープします。
     rHipJointHandle = sim.getObject('/Trunk/PelvisJoint/Pelvis/RHip')
     sim.setObjectInt32Parameter(rHipJointHandle, sim.jointintparam_motor_enabled, 1)
     sim.setObjectInt32Parameter(rHipJointHandle, sim.jointintparam_ctrl_enabled, 1)
-    sim.setJointTargetPosition(rHipJointHandle, -15 * math.pi / 180)
+    sim.setJointTargetPosition(rHipJointHandle, -20 * math.pi / 180)
+    -- 脚全体の重さに負けて揺れないよう、モーターの出す最大力を超強力（1000）にセット
+    sim.setJointTargetForce(rHipJointHandle, 1000)
     
     -- 遊脚期の時間
     swingDuration = 0.5
@@ -102,9 +104,10 @@ function sysCall_actuation()
     -- APPLY DIRECT SHAPE TORQUES OR JOINT HOLD
     -------------------------------------------------
     if t < patternDelay then
-        -- 待機時間（2秒未満）は、RHipの純正モーターがONになっているため
-        -- スクリプトからShapeに対するトルクを加える必要はありません。
-        -- エンジンが自動で -15度 に維持してくれます。
+        -- 待機時間（2秒未満）は、RHipの純正モーターをONにして維持しつつ、
+        -- 物理エンジン特有の「重さによるたわみ・揺れ」を完全に防ぐため、
+        -- 毎フレーム強制的に角度を上書き（キネマティック固定）します。
+        sim.setJointPosition(rHipJointHandle, -20 * math.pi / 180)
     else
         -- 2秒経過した瞬間（1回だけ実行）に、RHipのモーターをOFFにして「完全な脱力（Free）」にします
         if not swingStarted then
