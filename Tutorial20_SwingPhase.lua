@@ -60,7 +60,7 @@ function sysCall_init()
     kneeFlexionDelay = 0.1   -- 遊脚開始から膝を曲げ始めるまでの遅延時間（秒）
     peakKneeFlexTorque = 4.0  -- 屈曲（曲げる）
     peakKneeExtTorque  = 1.0 -- 伸展（伸ばす）
-    peakKneeBrakeTorque = 10.0 -- ⭐️追加：遊脚終期の「膝振り切り（衝撃）」を抑えるための強力なブレーキ（屈曲方向の力）
+    peakKneeBrakeTorque = 1.0 -- ⭐️変更：股関節の引き戻しがなくなったため、弱いブレーキ（1.0程度）で十分です
     
     
     -- [Ankle] 足首（RFoot）を中間位で強固に固定する
