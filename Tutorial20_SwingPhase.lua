@@ -16,6 +16,20 @@ function sysCall_init()
     -- 最初の2秒間だけ、骨盤の質量計算を「静的（重さ無限大の固定物）」にして空中に完全固定します。
     sim.setObjectInt32Parameter(pelvisHandle, sim.shapeintparam_static, 1)
     
+    -- データ出力用の関節ハンドル取得（Knee）
+    rKneeJointHandle = sim.getObject('/Trunk/PelvisJoint/Pelvis/RHip/RThigh/RKnee')
+    
+    -- CSV出力用のファイルセットアップ
+    csvFilePath = "/Users/aoyamahiroki/Desktop/CoppeliaSim_Tutorial/Tutorial20_SwingData.csv"
+    csvFile = io.open(csvFilePath, "w")
+    if csvFile then
+        -- ヘッダー行を書き込み（Time, 骨盤の前後傾(Pitch), 側方傾斜(Roll), 回旋(Yaw), 股関節角度, 膝関節角度, 足部のY座標）
+        csvFile:write("Time,Pelvis_Pitch_deg,Pelvis_Roll_deg,Pelvis_Yaw_deg,RHip_deg,RKnee_deg,RFoot_Y_m\n")
+        print("Data Export Started: Tutorial20_SwingData.csv")
+    else
+        print("Error: Could not open CSV file for writing.")
+    end
+    
     -------------------------------------------------
     -- SWING PHASE TORQUE PARAMETERS (Right Leg)
     -------------------------------------------------
@@ -35,18 +49,18 @@ function sysCall_init()
     -- [Hip] 太もも（RThigh）を回転させる（持ち上げる）ためのトルク
     -- 遊脚相全体（swingDuration）のうち、前方向に振り上げ続ける時間の割合（0.0 〜 1.0）
     -- この割合を増やすと、前振りの時間が長くなり、ブレーキ（伸展）の時間が短くなります。
-    hipFlexPhaseRatio = 0.8
+    hipFlexPhaseRatio = 0.95
     
     -- X軸周り（Pitch）の直接的な回転力。質量に対して非常に敏感です。
-    peakHipFlexTorque = 7.0   -- 屈曲（前振り） ※初期位置が後ろになった分、大きめの前振り力が必要
-    peakHipExtTorque  = 5.0   -- 伸展（ブレーキ）
+    peakHipFlexTorque = 6.0   -- 屈曲（前振り） ※初期位置が後ろになった分、大きめの前振り力が必要
+    peakHipExtTorque  = 0   -- 伸展（ブレーキ）
     
     -- [Knee] スネ（RShank）を回転させる（曲げる）ためのトルク
     -- 遊脚開始から少し遅らせて膝を曲げ始めることで「股関節から先に動く」自然なスイングになります。
     kneeFlexionDelay = 0.1   -- 遊脚開始から膝を曲げ始めるまでの遅延時間（秒）
     peakKneeFlexTorque = 4.0  -- 屈曲（曲げる）
-    peakKneeExtTorque  = 0.1  -- 伸展（伸ばす）
-    peakKneeBrakeTorque = 11.0 -- ⭐️追加：遊脚終期の「膝振り切り（衝撃）」を抑えるための強力なブレーキ（屈曲方向の力）
+    peakKneeExtTorque  = 1.0 -- 伸展（伸ばす）
+    peakKneeBrakeTorque = 10.0 -- ⭐️追加：遊脚終期の「膝振り切り（衝撃）」を抑えるための強力なブレーキ（屈曲方向の力）
     
     
     -- [Ankle] 足首（RFoot）を中間位で強固に固定する
@@ -87,6 +101,23 @@ end
 
 function sysCall_actuation()
     local t = sim.getSimulationTime()
+    
+    -------------------------------------------------
+    -- DATA EXPORT (CSV出力)
+    -------------------------------------------------
+    if csvFile then
+        local pEuler = sim.getObjectOrientation(pelvisHandle, -1)
+        local hipAng = sim.getJointPosition(rHipJointHandle)
+        local kneeAng = sim.getJointPosition(rKneeJointHandle)
+        local footPos = sim.getObjectPosition(rFootHandle, -1)
+        
+        -- rad を deg に変換して記録、足部は絶対座標のY軸（前・後）位置を記録
+        csvFile:write(string.format("%.3f,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f\n", 
+            t,
+            math.deg(pEuler[1]), math.deg(pEuler[2]), math.deg(pEuler[3]), 
+            math.deg(hipAng), math.deg(kneeAng), footPos[2]
+        ))
+    end
     
     -------------------------------------------------
     -- APPLY KINEMATIC LIMITS (骨盤姿勢の安定化)
@@ -187,5 +218,12 @@ function sysCall_actuation()
     if t > (patternDelay + swingDuration + 1.0) then
         print("--- Swing Phase Completed. Stopping Simulation ---")
         sim.stopSimulation()
+    end
+end
+
+function sysCall_cleanup()
+    if csvFile then
+        csvFile:close()
+        print("Data Export Finished: Saved to " .. csvFilePath)
     end
 end
