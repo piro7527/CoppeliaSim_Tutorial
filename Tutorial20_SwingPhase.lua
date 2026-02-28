@@ -52,7 +52,7 @@ function sysCall_init()
     hipFlexPhaseRatio = 0.95
     
     -- X軸周り（Pitch）の直接的な回転力。質量に対して非常に敏感です。
-    peakHipFlexTorque = 6.0   -- 屈曲（前振り） ※初期位置が後ろになった分、大きめの前振り力が必要
+    peakHipFlexTorque = 5.0   -- 屈曲（前振り） ※初期位置が後ろになった分、大きめの前振り力が必要
     peakHipExtTorque  = 0   -- 伸展（ブレーキ）
     
     -- [Knee] スネ（RShank）を回転させる（曲げる）ためのトルク
@@ -103,17 +103,19 @@ function sysCall_actuation()
     local t = sim.getSimulationTime()
     
     -------------------------------------------------
-    -- DATA EXPORT (CSV出力)
+    -- DATA EXPORT (CSV出力: 遊脚相の間のみ記録)
     -------------------------------------------------
-    if csvFile then
+    if csvFile and t >= patternDelay and t <= (patternDelay + swingDuration) then
         local pEuler = sim.getObjectOrientation(pelvisHandle, -1)
         local hipAng = sim.getJointPosition(rHipJointHandle)
         local kneeAng = sim.getJointPosition(rKneeJointHandle)
         local footPos = sim.getObjectPosition(rFootHandle, -1)
         
         -- rad を deg に変換して記録、足部は絶対座標のY軸（前・後）位置を記録
+        -- 記録時間は遊脚開始を0秒とする相対時間（tRel）で出力するのも便利かもしれません
+        local tRel = t - patternDelay
         csvFile:write(string.format("%.3f,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f\n", 
-            t,
+            tRel,
             math.deg(pEuler[1]), math.deg(pEuler[2]), math.deg(pEuler[3]), 
             math.deg(hipAng), math.deg(kneeAng), footPos[2]
         ))
