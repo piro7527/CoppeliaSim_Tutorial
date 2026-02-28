@@ -34,12 +34,14 @@ function sysCall_init()
     
     -- [Hip] 太もも（RThigh）を回転させる（持ち上げる）ためのトルク
     -- X軸周り（Pitch）の直接的な回転力。質量に対して非常に敏感です。
-    peakHipFlexTorque = 10.0   -- 屈曲（前振り） ※初期位置が後ろになった分、大きめの前振り力が必要
-    peakHipExtTorque  = 6.0   -- 伸展（ブレーキ）
+    peakHipFlexTorque = 20.0   -- 屈曲（前振り） ※初期位置が後ろになった分、大きめの前振り力が必要
+    peakHipExtTorque  = 10.0   -- 伸展（ブレーキ）
     
     -- [Knee] スネ（RShank）を回転させる（曲げる）ためのトルク
-    peakKneeFlexTorque = 4.0  -- 屈曲（曲げる）
-    peakKneeExtTorque  = 4.0  -- 伸展（伸ばす）
+    -- 遊脚開始から少し遅らせて膝を曲げ始めることで「股関節から先に動く」自然なスイングになります。
+    kneeFlexionDelay = 0.1   -- 遊脚開始から膝を曲げ始めるまでの遅延時間（秒）
+    peakKneeFlexTorque = 10.0  -- 屈曲（曲げる）
+    peakKneeExtTorque  = 10.0  -- 伸展（伸ばす）
     
     -- [Ankle] 足首（RFoot）を中間位で強固に固定する
     -- スクリプトからの力学的なバネ（ビヨンビヨンする）や、毎フレームの上書きではなく、
@@ -133,13 +135,22 @@ function sysCall_actuation()
         end
         
         -- 2. Kneeのトルク計算（前半：屈曲クリアランス、後半：伸展で着地準備）
-        local kneeFlexPhase = swingDuration * 0.4
-        if tRel <= kneeFlexPhase then
-            kneeTorqueX = calculateTorqueValue(tRel, kneeFlexPhase, peakKneeFlexTorque)  -- プラスで膝を曲げる
-        elseif tRel <= swingDuration then
-            local tExt = tRel - kneeFlexPhase
-            local kneeExtPhase = swingDuration - kneeFlexPhase
-            kneeTorqueX = -calculateTorqueValue(tExt, kneeExtPhase, peakKneeExtTorque) -- マイナスで膝を伸ばす
+        -- 指定した遅延時間（kneeFlexionDelay）が経過するまでは膝に力を入れません
+        if tRel <= kneeFlexionDelay then
+            kneeTorqueX = 0
+        else
+            -- 遅延を引いた、膝が実際に動く実質的な利用可能時間
+            local kneeActiveDuration = swingDuration - kneeFlexionDelay
+            local tRelKnee = tRel - kneeFlexionDelay
+            
+            local kneeFlexPhase = kneeActiveDuration * 0.4
+            if tRelKnee <= kneeFlexPhase then
+                kneeTorqueX = calculateTorqueValue(tRelKnee, kneeFlexPhase, peakKneeFlexTorque)  -- プラスで膝を曲げる
+            elseif tRelKnee <= kneeActiveDuration then
+                local tExt = tRelKnee - kneeFlexPhase
+                local kneeExtPhase = kneeActiveDuration - kneeFlexPhase
+                kneeTorqueX = -calculateTorqueValue(tExt, kneeExtPhase, peakKneeExtTorque) -- マイナスで膝を伸ばす
+            end
         end
         
         -- 遊脚相（2秒以降）のみ、Shapeに対して直接トルクを印加
