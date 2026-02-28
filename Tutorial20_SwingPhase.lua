@@ -161,6 +161,8 @@ function sysCall_actuation()
         end
         
         local tRel = t - patternDelay
+        local hipTorqueX = 0
+        local kneeTorqueX = 0
         
         -- 1. Hipのトルク計算（前半：屈曲、後半：伸展ブレーキ）
         -- ★絶対座標のX軸回転において、プラス回転（+X）が「前方への振り出し（Hip Flexion）」になります。
