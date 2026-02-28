@@ -18,17 +18,13 @@ function sysCall_init()
     -------------------------------------------------
     -- SWING PHASE TORQUE PARAMETERS (Right Leg)
     -------------------------------------------------
-    -- 1. 開始時の物理的なセットアップ（股関節を伸展位＝-15度に強制配置）
-    -- ※本来関節モードはFreeですが、開始の一瞬だけ位置を直接書き換えることでToe-off姿勢を作ります
+    -- 1. 開始時の物理的なセットアップ（股関節を伸展位＝-15度に強力にロック）
+    -- 姿勢が崩れないよう、最初の待機時間中は「物理エンジンの純正モーター」をONにして
+    -- ガチガチに -15度 の位置でキープします。
     rHipJointHandle = sim.getObject('/Trunk/PelvisJoint/Pelvis/RHip')
-    sim.setJointPosition(rHipJointHandle, -15 * math.pi / 180)
-    
-    -- 2. 初期姿勢（Toe-off）を維持するための保持トルク
-    -- 後ろ側（伸展方向）に脚を引っ張り上げておく力。
-    -- ⚠️注意：ここで「1.0」や「0.5」など弱すぎる力を設定すると、
-    -- 重力（-9.81）に負けてしまい、2秒待つ間に脚が勝手に前へ落ちてしまいます。
-    -- 脚が落ちないように支えきれる強さ（今回は3.0程度）が必要です。
-    initialHipExtHoldTorque = 3.0 
+    sim.setObjectInt32Parameter(rHipJointHandle, sim.jointintparam_motor_enabled, 1)
+    sim.setObjectInt32Parameter(rHipJointHandle, sim.jointintparam_ctrl_enabled, 1)
+    sim.setJointTargetPosition(rHipJointHandle, -15 * math.pi / 180)
     
     -- 遊脚期の時間
     swingDuration = 0.5
@@ -64,6 +60,7 @@ function sysCall_init()
     Kd_ang = 0.5
     
     patternDelay = 2.0
+    swingStarted = false
     
     print("=== Swing Phase by Direct Shape Torques (Right Leg) ===")
 end
@@ -102,16 +99,20 @@ function sysCall_actuation()
     sim.addForceAndTorque(pelvisHandle, {0, 0, 0}, {torqueX, torqueY, torqueZ})
     
     -------------------------------------------------
-    -- APPLY DIRECT SHAPE TORQUES (Feed-forward)
+    -- APPLY DIRECT SHAPE TORQUES OR JOINT HOLD
     -------------------------------------------------
-    local hipTorqueX = 0
-    local kneeTorqueX = 0
-    
     if t < patternDelay then
-        -- 待機中は、遊脚開始前の「股関節伸展位（脚を後ろに残した状態）」を作るため、
-        -- 常に後ろ方向（伸展方向）への一定トルクをかけ続けます。
-        hipTorqueX = initialHipExtHoldTorque
+        -- 待機時間（2秒未満）は、RHipの純正モーターがONになっているため
+        -- スクリプトからShapeに対するトルクを加える必要はありません。
+        -- エンジンが自動で -15度 に維持してくれます。
     else
+        -- 2秒経過した瞬間（1回だけ実行）に、RHipのモーターをOFFにして「完全な脱力（Free）」にします
+        if not swingStarted then
+            sim.setObjectInt32Parameter(rHipJointHandle, sim.jointintparam_motor_enabled, 0)
+            swingStarted = true
+            print("--- Swing Phase Started! (Motor freed, applying Torques) ---")
+        end
+        
         local tRel = t - patternDelay
         
         -- 1. Hipのトルク計算（前半：屈曲、後半：伸展ブレーキ）
@@ -133,13 +134,14 @@ function sysCall_actuation()
             local kneeExtPhase = swingDuration - kneeFlexPhase
             kneeTorqueX = -calculateTorqueValue(tExt, kneeExtPhase, peakKneeExtTorque) -- マイナスで膝を伸ばす
         end
+        
+        -- 遊脚相（2秒以降）のみ、Shapeに対して直接トルクを印加
+        -- 太もも全体をPitch軸（X軸）を中心に持ち上げる
+        sim.addForceAndTorque(rThighHandle, {0, 0, 0}, {hipTorqueX, 0, 0})
+        
+        -- スネ部分をPitch軸（X軸）を中心に曲げる
+        sim.addForceAndTorque(rShankHandle, {0, 0, 0}, {kneeTorqueX, 0, 0})
     end
-    
-    -- 太もも全体をPitch軸（X軸）を中心に持ち上げる
-    sim.addForceAndTorque(rThighHandle, {0, 0, 0}, {hipTorqueX, 0, 0})
-    
-    -- スネ部分をPitch軸（X軸）を中心に曲げる
-    sim.addForceAndTorque(rShankHandle, {0, 0, 0}, {kneeTorqueX, 0, 0})
     
     -------------------------------------------------
     -- APPLY KINEMATIC LIMITS TO ANKLE (下垂足の完全防止)
