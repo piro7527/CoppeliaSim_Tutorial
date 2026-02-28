@@ -10,9 +10,9 @@ function sysCall_init()
     rThighHandle = sim.getObject('/Trunk/PelvisJoint/Pelvis/RHip/RThigh')
     rShankHandle = sim.getObject('/Trunk/PelvisJoint/Pelvis/RHip/RThigh/RKnee/RShank')
     
-    -- 無重力モードの有効化
-    sim.setArrayParameter(sim.arrayparam_gravity, {0, 0, 0})
-    print("Zero Gravity Mode: ON (Focus: Right Leg)")
+    -- 重力モードの有効化（正常歩行の遊脚相は重力を利用した振り子運動です）
+    sim.setArrayParameter(sim.arrayparam_gravity, {0, 0, -9.81})
+    print("Standard Gravity Mode: ON (-9.81, Focus: Right Leg)")
     
     -------------------------------------------------
     -- SWING PHASE TORQUE PARAMETERS (Right Leg)
@@ -126,4 +126,12 @@ function sysCall_actuation()
     -- スネ部分をPitch軸（X軸）を中心に曲げる
     sim.addForceAndTorque(rShankHandle, {0, 0, 0}, {kneeTorqueX, 0, 0})
     
+    -------------------------------------------------
+    -- AUTO-STOP SIMULATION
+    -------------------------------------------------
+    -- 遊脚相が終わってから1秒経過したら自動的にシミュレーションを終了する
+    if t > (patternDelay + swingDuration + 1.0) then
+        print("--- Swing Phase Completed. Stopping Simulation ---")
+        sim.stopSimulation()
+    end
 end
