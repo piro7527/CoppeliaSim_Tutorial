@@ -44,23 +44,23 @@ function sysCall_init()
     sim.setJointTargetForce(rHipJointHandle, 1000)
     -- 2. 初期姿勢（Toe-off）を維持するための保持トルク
     -- 遊脚期の時間（膝関節が完全に伸び切る0.54秒間をスイングフェーズとする）
-    swingDuration = 0.54
+    swingDuration = 0.7
     
     -- [Hip] 太もも（RThigh）を回転させる（持ち上げる）ためのトルク
     -- 遊脚相全体（swingDuration）のうち、前方向に振り上げ続ける時間の割合（0.0 〜 1.0）
     -- この割合を増やすと、前振りの時間が長くなり、ブレーキ（伸展）の時間が短くなります。
-    hipFlexPhaseRatio = 0.95
+    hipFlexPhaseRatio = 0.55
     
     -- X軸周り（Pitch）の直接的な回転力。質量に対して非常に敏感です。
-    peakHipFlexTorque = 5.0   -- 屈曲（前振り） ※初期位置が後ろになった分、大きめの前振り力が必要
-    peakHipExtTorque  = 0   -- 伸展（ブレーキ）
+    peakHipFlexTorque = 3.0   -- 屈曲（前振り） ※初期位置が後ろになった分、大きめの前振り力が必要
+    peakHipExtTorque  = 2.6   -- 伸展（ブレーキ）前方へ振り出しすぎないようハムストリングス相当の制動トルク
     
     -- [Knee] スネ（RShank）を回転させる（曲げる）ためのトルク
     -- 遊脚開始から少し遅らせて膝を曲げ始めることで「股関節から先に動く」自然なスイングになります。
     kneeFlexionDelay = 0.1   -- 遊脚開始から膝を曲げ始めるまでの遅延時間（秒）
-    peakKneeFlexTorque = 4.0  -- 屈曲（曲げる）
-    peakKneeExtTorque  = 1.0 -- 伸展（伸ばす）
-    peakKneeBrakeTorque = 1.0 -- ⭐️変更：股関節の引き戻しがなくなったため、弱いブレーキ（1.0程度）で十分です
+    peakKneeFlexTorque = 0.5  -- 屈曲（曲げる）
+    peakKneeExtTorque  = 2.5 -- 伸展（伸ばす）
+    peakKneeBrakeTorque = 1.7 -- ⭐️変更：股関節の引き戻しがなくなったため、弱いブレーキ（1.0程度）で十分です
     
     
     -- [Ankle] 足首（RFoot）を中間位で強固に固定する
@@ -86,6 +86,7 @@ function sysCall_init()
     
     patternDelay = 2.0
     swingStarted = false
+    lastCsvTime  = -math.huge  -- 最終CSV記録時刻（50Hzサンプリング管理用）
     
     print("=== Swing Phase by Direct Shape Torques (Right Leg) ===")
 end
@@ -103,22 +104,21 @@ function sysCall_actuation()
     local t = sim.getSimulationTime()
     
     -------------------------------------------------
-    -- DATA EXPORT (CSV出力: 遊脚相の間のみ記録)
+    -- DATA EXPORT (CSV出力: 50Hz / 遊脚開始〜シミュレーション終了まで)
     -------------------------------------------------
-    if csvFile and t >= patternDelay and t <= (patternDelay + swingDuration) then
+    if csvFile and t >= patternDelay and (t - lastCsvTime) >= 0.02 then
         local pEuler = sim.getObjectOrientation(pelvisHandle, -1)
-        local hipAng = sim.getJointPosition(rHipJointHandle)
+        local hipAng  = sim.getJointPosition(rHipJointHandle)
         local kneeAng = sim.getJointPosition(rKneeJointHandle)
         local footPos = sim.getObjectPosition(rFootHandle, -1)
         
-        -- rad を deg に変換して記録、足部は絶対座標のY軸（前・後）位置を記録
-        -- 記録時間は遊脚開始を0秒とする相対時間（tRel）で出力するのも便利かもしれません
-        local tRel = t - patternDelay
-        csvFile:write(string.format("%.3f,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f\n", 
+        local tRel = t - patternDelay  -- 遊脚開始を0秒とする相対時間
+        csvFile:write(string.format("%.3f,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f\n",
             tRel,
-            math.deg(pEuler[1]), math.deg(pEuler[2]), math.deg(pEuler[3]), 
+            math.deg(pEuler[1]), math.deg(pEuler[2]), math.deg(pEuler[3]),
             math.deg(hipAng), math.deg(kneeAng), footPos[2]
         ))
+        lastCsvTime = t  -- 記録時刻を更新
     end
     
     -------------------------------------------------
@@ -164,15 +164,17 @@ function sysCall_actuation()
         local hipTorqueX = 0
         local kneeTorqueX = 0
         
-        -- 1. Hipのトルク計算（屈曲のみ）
+        -- 1. Hipのトルク計算（屈曲60% → 伸展ブレーキ40%）
         -- ★絶対座標のX軸回転において、プラス回転（+X）が「前方への振り出し（Hip Flexion）」になります。
-        local hipFlexPhase = swingDuration * hipFlexPhaseRatio
+        local hipFlexPhase  = swingDuration * hipFlexPhaseRatio           -- 前半60%: 屈曲（前振り）
+        local hipBrakePhase = swingDuration - hipFlexPhase                 -- 後半40%: 伸展ブレーキ
         if tRel <= hipFlexPhase then
-            hipTorqueX = calculateTorqueValue(tRel, hipFlexPhase, peakHipFlexTorque) -- プラスで前方向回転
+            hipTorqueX = calculateTorqueValue(tRel, hipFlexPhase, peakHipFlexTorque)   -- プラスで前方向回転
         else
-            -- 振り出しが終わった後は、後ろに引き戻す（伸展させる）のではなく、
-            -- トルクを0にして慣性と重力だけで自然に脚を前方に放り出させます。
-            hipTorqueX = 0
+            -- 振り出し後、ハムストリングスのように逆方向（伸展＝後ろ向き）にブレーキをかけて
+            -- 着地直前のオーバースイングを防ぎ、ヒールストライクに備えた姿勢を整えます。
+            local tBrake = tRel - hipFlexPhase
+            hipTorqueX = -calculateTorqueValue(tBrake, hipBrakePhase, peakHipExtTorque) -- マイナスで伸展方向
         end
         
         -- 2. Kneeのトルク計算（前半：屈曲クリアランス、中盤：伸展で前へ、終盤：ブレーキで衝撃吸収）
@@ -184,8 +186,8 @@ function sysCall_actuation()
             local kneeActiveDuration = swingDuration - kneeFlexionDelay
             local tRelKnee = tRel - kneeFlexionDelay
             
-            local kneeFlexPhase = kneeActiveDuration * 0.3        -- 最初30%で膝を曲げてクリアランス
-            local kneeExtPhase  = kneeActiveDuration * 0.4        -- 次の40%で前にスネを振り出す
+            local kneeFlexPhase = kneeActiveDuration * 0.2        -- 最初30%で膝を曲げてクリアランス
+            local kneeExtPhase  = kneeActiveDuration * 0.5        -- 次の40%で前にスネを振り出す
             local kneeBrakePhase= kneeActiveDuration * 0.3        -- 最後の30%で強力なブレーキ（屈曲方向）をかけて衝撃吸収
             
             if tRelKnee <= kneeFlexPhase then
@@ -219,7 +221,7 @@ function sysCall_actuation()
     -- AUTO-STOP SIMULATION
     -------------------------------------------------
     -- 遊脚相が終わってから1秒経過したら自動的にシミュレーションを終了する
-    if t > (patternDelay + swingDuration + 1.0) then
+    if t > (patternDelay + swingDuration + 3.0) then
         print("--- Swing Phase Completed. Stopping Simulation ---")
         sim.stopSimulation()
     end

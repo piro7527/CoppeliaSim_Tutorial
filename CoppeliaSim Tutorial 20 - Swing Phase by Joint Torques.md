@@ -37,11 +37,20 @@ CoppeliaSimのバージョンや物理エンジンによっては、スクリプ
 
 ## 2. スクリプトの書き換え（直接トルクの印加）
 
-`Pelvis` にアタッチされているスクリプトを開き、**完全に以下のコードに書き換え** ます。
-このコードでは、`sim.addForceAndTorque` という絶対確実な命令を使って、太もも（RThigh）やスネ（RShank）の図形自体に直接「回転させる力」を加えます。
-また、遊脚が始まる前の待機状態（初期姿勢）として、正常歩行のToe-off（離地）時のような「股関節の伸展位（脚が後ろに残った状態）」を作り出す力を加え続けます。
+スクリプトファイル（`Tutorial20_SwingPhase.lua`）を外部エディタで編集し、`Pelvis` にアタッチされているスクリプトエディタには以下の1行だけを記載します。
 
 ```lua
+-- CoppeliaSimのスクリプトエディタにはこれだけ記載する
+-- ※パスはご自身の環境に合わせて変更してください
+dofile('/Users/aoyamahiroki/Desktop/CoppeliaSim_Tutorial/Tutorial20_SwingPhase.lua')
+```
+
+外部スクリプト（`Tutorial20_SwingPhase.lua`）の全内容は以下の通りです。
+
+```lua
+-- Tutorial 20: Swing Phase by Direct Shape Torques (Right Leg)
+-- このファイルはVS Code等で編集し、保存するだけでCoppeliaSim側に即座に反映されます。
+
 function sysCall_init()
     -- *非常に重要*: 力（Force/Torque）を加える対象は「Shape（箱や円柱などの図形）」でなければなりません。
     -- Pelvis (姿勢制御用)
@@ -50,40 +59,75 @@ function sysCall_init()
     -- トルクを加える対象の「骨格（Shape）」を取得
     rThighHandle = sim.getObject('/Trunk/PelvisJoint/Pelvis/RHip/RThigh')
     rShankHandle = sim.getObject('/Trunk/PelvisJoint/Pelvis/RHip/RThigh/RKnee/RShank')
+    rFootHandle  = sim.getObject('/Trunk/PelvisJoint/Pelvis/RHip/RThigh/RKnee/RShank/RAnkle/RFoot')
     
-    -- 無重力モードの有効化
-    sim.setArrayParameter(sim.arrayparam_gravity, {0, 0, 0})
-    print("Zero Gravity Mode: ON (Focus: Right Leg)")
+    -- 0. 開始時の物理的なセットアップ（骨盤自体の完全固定）
+    -- 遊脚開始を待つ間、重心変化によって骨盤全体（Pelvis）がゆらゆら揺れるのを防ぐため、
+    -- 最初の2秒間だけ、骨盤の質量計算を「静的（重さ無限大の固定物）」にして空中に完全固定します。
+    sim.setObjectInt32Parameter(pelvisHandle, sim.shapeintparam_static, 1)
+    
+    -- データ出力用の関節ハンドル取得（Knee）
+    rKneeJointHandle = sim.getObject('/Trunk/PelvisJoint/Pelvis/RHip/RThigh/RKnee')
+    
+    -- CSV出力用のファイルセットアップ
+    csvFilePath = "/Users/aoyamahiroki/Desktop/CoppeliaSim_Tutorial/Tutorial20_SwingData.csv"
+    csvFile = io.open(csvFilePath, "w")
+    if csvFile then
+        csvFile:write("Time,Pelvis_Pitch_deg,Pelvis_Roll_deg,Pelvis_Yaw_deg,RHip_deg,RKnee_deg,RFoot_Y_m\n")
+        print("Data Export Started: Tutorial20_SwingData.csv")
+    else
+        print("Error: Could not open CSV file for writing.")
+    end
     
     -------------------------------------------------
     -- SWING PHASE TORQUE PARAMETERS (Right Leg)
     -------------------------------------------------
-    -- 初期姿勢（Toe-off）を維持するための保持トルク
-    -- 後ろ側（伸展方向）に脚を引っ張り上げておく力
-    initialHipExtHoldTorque = 1.0 
-    
-    -- 遊脚期の時間
-    swingDuration = 0.5
+    -- 1. 開始時の物理的なセットアップ（股関節を伸展位＝-15度に強力にロック）
+    -- 姿勢が崩れないよう、最初の待機時間中は「物理エンジンの純正モーター」をONにし、
+    -- さらに最大トルクを極端に大きくして -15度 の位置でキープします。
+    rHipJointHandle = sim.getObject('/Trunk/PelvisJoint/Pelvis/RHip')
+    sim.setObjectInt32Parameter(rHipJointHandle, sim.jointintparam_motor_enabled, 1)
+    sim.setObjectInt32Parameter(rHipJointHandle, sim.jointintparam_ctrl_enabled, 1)
+    sim.setJointTargetPosition(rHipJointHandle, -15 * math.pi / 180)
+    sim.setJointTargetForce(rHipJointHandle, 1000)
+
+    -- 遊脚期の時間（秒）
+    swingDuration = 0.54
     
     -- [Hip] 太もも（RThigh）を回転させる（持ち上げる）ためのトルク
+    -- 遊脚相全体（swingDuration）のうち、前方向に振り上げ続ける時間の割合（0.0 〜 1.0）
+    -- この割合を増やすと、前振りの時間が長くなり、ブレーキ（伸展）の時間が短くなります。
+    hipFlexPhaseRatio = 0.6
+
     -- X軸周り（Pitch）の直接的な回転力。質量に対して非常に敏感です。
-    peakHipFlexTorque = 2.0   -- 屈曲（前振り） ※初期位置が後ろになった分、大きめの前振り力が必要かも
-    peakHipExtTorque  = 1.0   -- 伸展（ブレーキ）
+    peakHipFlexTorque = 5.0   -- 屈曲（前振り）
+    peakHipExtTorque  = 2.0   -- 伸展ブレーキ（ハムストリングス相当）
     
     -- [Knee] スネ（RShank）を回転させる（曲げる）ためのトルク
-    peakKneeFlexTorque = 0.5  -- 屈曲（曲げる）
-    peakKneeExtTorque  = 0.5  -- 伸展（伸ばす）
+    -- 遊脚開始から少し遅らせて膝を曲げ始めることで「股関節から先に動く」自然なスイングになります。
+    kneeFlexionDelay   = 0.1   -- 遊脚開始から膝を曲げ始めるまでの遅延時間（秒）
+    peakKneeFlexTorque = 4.0   -- 屈曲（曲げる）
+    peakKneeExtTorque  = 1.0   -- 伸展（伸ばす）
+    peakKneeBrakeTorque= 1.0   -- 終盤ブレーキ（衝撃吸収）
+    
+    -- [Ankle] 足首（RFoot）を中間位で強固に固定する
+    -- 物理エンジンの純正モーター機能（位置制御）をONにして完全に0度（中間位）にロックします。
+    rAnkleJointHandle = sim.getObject('/Trunk/PelvisJoint/Pelvis/RHip/RThigh/RKnee/RShank/RAnkle')
+    sim.setObjectInt32Parameter(rAnkleJointHandle, sim.jointintparam_motor_enabled, 1)
+    sim.setObjectInt32Parameter(rAnkleJointHandle, sim.jointintparam_ctrl_enabled, 1)
+    sim.setJointTargetPosition(rAnkleJointHandle, 0)
     
     -------------------------------------------------
     -- PELVIS KINEMATICS LIMITS (Tutorial 9 から継続)
     -------------------------------------------------
-    limitPitch = 4 * math.pi / 180
+    limitPitch = 4   * math.pi / 180
     limitRoll  = 4.5 * math.pi / 180
-    limitYaw   = 4 * math.pi / 180
+    limitYaw   = 4   * math.pi / 180
     Kp_ang = 0.5
     Kd_ang = 0.5
     
     patternDelay = 2.0
+    swingStarted = false
     
     print("=== Swing Phase by Direct Shape Torques (Right Leg) ===")
 end
@@ -99,6 +143,22 @@ end
 
 function sysCall_actuation()
     local t = sim.getSimulationTime()
+    
+    -------------------------------------------------
+    -- DATA EXPORT (CSV出力: 遊脚相の間のみ記録)
+    -------------------------------------------------
+    if csvFile and t >= patternDelay and t <= (patternDelay + swingDuration) then
+        local pEuler = sim.getObjectOrientation(pelvisHandle, -1)
+        local hipAng  = sim.getJointPosition(rHipJointHandle)
+        local kneeAng = sim.getJointPosition(rKneeJointHandle)
+        local footPos = sim.getObjectPosition(rFootHandle, -1)
+        local tRel = t - patternDelay
+        csvFile:write(string.format("%.3f,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f\n", 
+            tRel,
+            math.deg(pEuler[1]), math.deg(pEuler[2]), math.deg(pEuler[3]),
+            math.deg(hipAng), math.deg(kneeAng), footPos[2]
+        ))
+    end
     
     -------------------------------------------------
     -- APPLY KINEMATIC LIMITS (骨盤姿勢の安定化)
@@ -122,48 +182,78 @@ function sysCall_actuation()
     sim.addForceAndTorque(pelvisHandle, {0, 0, 0}, {torqueX, torqueY, torqueZ})
     
     -------------------------------------------------
-    -- APPLY DIRECT SHAPE TORQUES (Feed-forward)
+    -- APPLY DIRECT SHAPE TORQUES OR JOINT HOLD
     -------------------------------------------------
-    local hipTorqueX = 0
-    local kneeTorqueX = 0
-    
     if t < patternDelay then
-        -- 待機中は、遊脚開始前の「股関節伸展位（脚を後ろに残した状態）」を作るため、
-        -- 常に後ろ方向（伸展方向）への一定トルクをかけ続けます。
-        hipTorqueX = initialHipExtHoldTorque
+        -- 待機時間中は、毎フレーム強制的に角度を上書きして揺れを防ぐ
+        sim.setJointPosition(rHipJointHandle, -15 * math.pi / 180)
     else
+        -- 2秒経過した瞬間（1回だけ実行）にモーター・静的固定を解除
+        if not swingStarted then
+            sim.setObjectInt32Parameter(pelvisHandle, sim.shapeintparam_static, 0)
+            sim.setObjectInt32Parameter(rHipJointHandle, sim.jointintparam_motor_enabled, 0)
+            swingStarted = true
+            print("--- Swing Phase Started! (Pelvis & Motor freed, applying Torques) ---")
+        end
+        
         local tRel = t - patternDelay
+        local hipTorqueX   = 0
+        local kneeTorqueX  = 0
         
-        -- 1. Hipのトルク計算（前半：屈曲、後半：伸展ブレーキ）
-        local hipFlexPhase = swingDuration * 0.6
+        -- 1. Hipのトルク計算（前半60%: 屈曲 → 後半40%: 伸展ブレーキ）
+        -- ★絶対座標のX軸回転において、プラス回転（+X）が「前方への振り出し（Hip Flexion）」になります。
+        local hipFlexPhase  = swingDuration * hipFlexPhaseRatio   -- 前半60%: 屈曲（前振り）
+        local hipBrakePhase = swingDuration - hipFlexPhase        -- 後半40%: 伸展ブレーキ
         if tRel <= hipFlexPhase then
-            hipTorqueX = -calculateTorqueValue(tRel, hipFlexPhase, peakHipFlexTorque) -- マイナスで前方向回転
-        elseif tRel <= swingDuration then
+            hipTorqueX = calculateTorqueValue(tRel, hipFlexPhase, peakHipFlexTorque)  -- プラスで前方向回転
+        else
+            -- 振り出し後、ハムストリングスのように逆方向（伸展＝後ろ向き）にブレーキをかけて
+            -- 着地直前のオーバースイングを防ぎ、ヒールストライクに備えた姿勢を整えます。
             local tBrake = tRel - hipFlexPhase
-            local hipExtPhase = swingDuration - hipFlexPhase
-            hipTorqueX = calculateTorqueValue(tBrake, hipExtPhase, peakHipExtTorque)  -- プラスで後ろ方向回転
+            hipTorqueX = -calculateTorqueValue(tBrake, hipBrakePhase, peakHipExtTorque)  -- マイナスで伸展方向
         end
         
-        -- 2. Kneeのトルク計算（前半：屈曲クリアランス、後半：伸展で着地準備）
-        local kneeFlexPhase = swingDuration * 0.4
-        if tRel <= kneeFlexPhase then
-            kneeTorqueX = calculateTorqueValue(tRel, kneeFlexPhase, peakKneeFlexTorque)  -- プラスで膝を曲げる
-        elseif tRel <= swingDuration then
-            local tExt = tRel - kneeFlexPhase
-            local kneeExtPhase = swingDuration - kneeFlexPhase
-            kneeTorqueX = -calculateTorqueValue(tExt, kneeExtPhase, peakKneeExtTorque) -- マイナスで膝を伸ばす
+        -- 2. Kneeのトルク計算（前半30%: 屈曲クリアランス → 中盤40%: 伸展 → 終盤30%: ブレーキ）
+        if tRel <= kneeFlexionDelay then
+            kneeTorqueX = 0
+        else
+            local kneeActiveDuration = swingDuration - kneeFlexionDelay
+            local tRelKnee = tRel - kneeFlexionDelay
+            
+            local kneeFlexPhase  = kneeActiveDuration * 0.3  -- 最初30%で膝を曲げてクリアランス
+            local kneeExtPhase   = kneeActiveDuration * 0.4  -- 次の40%で前にスネを振り出す
+            local kneeBrakePhase = kneeActiveDuration * 0.3  -- 最後30%で屈曲ブレーキ（衝撃吸収）
+            
+            if tRelKnee <= kneeFlexPhase then
+                kneeTorqueX = -calculateTorqueValue(tRelKnee, kneeFlexPhase, peakKneeFlexTorque)
+            elseif tRelKnee <= (kneeFlexPhase + kneeExtPhase) then
+                local tExt = tRelKnee - kneeFlexPhase
+                kneeTorqueX = calculateTorqueValue(tExt, kneeExtPhase, peakKneeExtTorque)
+            elseif tRelKnee <= kneeActiveDuration then
+                local tBrake = tRelKnee - (kneeFlexPhase + kneeExtPhase)
+                kneeTorqueX = -calculateTorqueValue(tBrake, kneeBrakePhase, peakKneeBrakeTorque)
+            end
         end
+        
+        -- Shapeに対して直接トルクを印加
+        sim.addForceAndTorque(rThighHandle, {0, 0, 0}, {hipTorqueX,  0, 0})
+        sim.addForceAndTorque(rShankHandle, {0, 0, 0}, {kneeTorqueX, 0, 0})
     end
     
-    -- Shapeに対して直接トルクを印加
-    -- {0, 0, 0} は力のベクトル（今回は純粋な回転力なのでゼロ）
-    -- {torqueX, torqueY, torqueZ} は回転させるトルクベクトル
-    -- 太もも全体をPitch軸（X軸）を中心に持ち上げる
-    sim.addForceAndTorque(rThighHandle, {0, 0, 0}, {hipTorqueX, 0, 0})
-    
-    -- スネ部分をPitch軸（X軸）を中心に曲げる
-    sim.addForceAndTorque(rShankHandle, {0, 0, 0}, {kneeTorqueX, 0, 0})
-   -- 外部ファイル側で必要な変数を定義、操作を記述...
+    -------------------------------------------------
+    -- AUTO-STOP SIMULATION
+    -------------------------------------------------
+    if t > (patternDelay + swingDuration + 1.0) then
+        print("--- Swing Phase Completed. Stopping Simulation ---")
+        sim.stopSimulation()
+    end
+end
+
+function sysCall_cleanup()
+    if csvFile then
+        csvFile:close()
+        print("Data Export Finished: Saved to " .. csvFilePath)
+    end
 end
 ```
 
@@ -171,43 +261,30 @@ end
 
 ## 3. コードの重要なポイント
 
-### 遊脚開始姿勢（Toe-off）の再現
-正常歩行の遊脚相は、脚が直下（0度）にある状態から始まるわけではなく、**支持脚期を終えて脚が体幹より後方に取り残された状態（股関節伸展位）**から猛烈な前振り上げが始まります。
-今回のスクリプトでは、最初の `patternDelay` の2秒間、`initialHipExtHoldTorque` という「脚を後ろに引っ張り上げておく力」をかけ続けることで、この「溜め」の姿勢を再現しました。
-ここから一気に前方向（マイナス方向）の大きなトルク `peakHipFlexTorque` が発揮されることで、勢いのあるスイングが生み出されます。
+### 待機時間中の骨盤・股関節固定
+遊脚開始前の2秒間は、骨盤（Pelvis）を `shapeintparam_static = 1` で物理エンジン的に完全固定し、同時に股関節（RHip）の純正モーターを位置制御（-15°）で強力にロックします。
+これにより、重力による揺れや崩れを防いだ状態で **Toe-off（離地）時の股関節伸展姿勢** を安定して再現します。2秒経過した瞬間にこれらをすべて解除し、トルク制御に切り替えます。
 
 ### 関節モーターからの脱却（`addForceAndTorque` の利用）
 これまでの手法は「関節に備わっているモーター」をハックして力制御を試みていましたが、環境によって動作が不安定でした。
 そこで、Tutorial 9で骨盤（Pelvis）に介助力を加えたのと同じ `sim.addForceAndTorque` という**絶対に動作する物理エンジン直結の命令**を採用しました。
 
-今回は、骨盤を「引っ張る（Force）」のではなく、太もも（RThigh）やスネ（RShank）の図形自体を「**直接ネジ回しのように回転させる（Torque）**」ことで、筋肉が関節を跨いで骨を引っ張る挙動をより忠実に再現しています。
+太もも（RThigh）やスネ（RShank）の図形自体を「**直接ネジ回しのように回転させる（Torque）**」ことで、筋肉が関節を跨いで骨を引っ張る挙動をより忠実に再現しています。
 
----
-
-## 💡 おまけ：スクリプトの外部ファイル化（エディタ連携）
-CoppeliaSim 内蔵のエディタに毎回コピー＆ペーストするのが面倒な場合、スクリプトを外部のテキストファイル（例: `swing_script.lua`）としてデスクトップ等に保存し、CoppeliaSim 側からはそのファイルを**読み込むだけ**にする方法があります。
-
-Pelvis にアタッチされているスクリプトを、たったの1行（あるいは数行）で以下のように書き換えます。
-
-```lua
--- CoppeliaSimのスクリプトエディタにはこれだけ記載する
--- ※パスはご自身の環境に合わせて変更してください
-dofile('/Users/aoyamahiroki/Desktop/CoppeliaSim_Tutorial/swing_script.lua')
-```
-
-こうすることで、今後は VS Code などの使い慣れたエディタで `swing_script.lua` を編集・保存するだけで、自動的に次回シミュレーション時に変更が即座に反映されるようになります。より複雑なコードを書く際に非常に便利です。
-これまでの手法は「関節に備わっているモーター」をハックして力制御を試みていましたが、環境によって動作が不安定でした。
-そこで、Tutorial 9で骨盤（Pelvis）に介助力を加えたのと同じ `sim.addForceAndTorque` という**絶対に動作する物理エンジン直結の命令**を採用しました。
-
-今回は、骨盤を「引っ張る（Force）」のではなく、太もも（RThigh）やスネ（RShank）の図形自体を「**直接ネジ回しのように回転させる（Torque）**」ことで、筋肉が関節を跨いで骨を引っ張る挙動をより忠実に再現しています。
-正常歩行の遊脚相（Swing Phase）は、単に「前に振り上げる」だけではなく、以下のような複雑な筋活動（トルク）の推移があります。このスクリプトではそれを簡略化したフェーズに分けて表現しました。
+### トルクフェーズの構成（筋電図を模した3段階制御）
+正常歩行の遊脚相（Swing Phase）では、以下のような複雑な筋活動の推移があります。
 
 - **Hip（股関節）**:
-  1. **初期〜中期（Flexion Phase）**: 腸腰筋などが強く働き、脚を前にスイングさせます（正のトルク）。
-  2. **終期（Extension Brake）**: このままでは足が前に飛びすぎてしまうため、ハムストリングス等が働いて強力なブレーキ（負のトルク）をかけ、着地に備えます。
+  1. **前半60%（Flexion Phase）**: 腸腰筋などが強く働き、脚を前にスイングさせます（`+X` 方向のトルク）。
+  2. **後半40%（Extension Brake）**: ハムストリングスが前方へのオーバースイングを防ぐために制動します（`-X` 方向のトルク）。ヒールストライクに備えた着地姿勢を整えます。
 - **Knee（膝関節）**:
-  1. **初期（Flexion Phase）**: 足先が地面に引っかからないよう、膝を素早く曲げます（正のトルク）。
-  2. **中期〜終期（Extension Phase）**: 振り出した勢いで膝が伸びていきますが、大腿四頭筋等も働き、着地（ヒールストライク）できるまっすぐな状態に向けて伸展トルク（負のトルク）を加えます。
+  1. **初期30%（Flexion Phase）**: 足先が地面に引っかからないよう、膝を素早く曲げます（クリアランス確保）。
+  2. **中盤40%（Extension Phase）**: 大腿四頭筋等も働き、着地（ヒールストライク）に向け膝を伸ばします。
+  3. **終盤30%（Brake Phase）**: 着地の衝撃を吸収するため、再び屈曲方向のブレーキをかけます。
+- **Ankle（足首）**: 物理エンジンの位置制御モーターで0度（中間位）に完全固定し、下垂足を防ぎます。
+
+### 足首固定（下垂足の完全防止）
+足首（RAnkle）はスクリプトからの力学的なバネ制御ではなく、物理エンジンの純正モーター位置制御によって0°に固定します。これによりスイング中の下垂足（foot drop）を確実に防ぎます。
 
 ---
 
@@ -215,33 +292,34 @@ dofile('/Users/aoyamahiroki/Desktop/CoppeliaSim_Tutorial/swing_script.lua')
 
 1. ▶️ **Start simulation** を実行します。
 2. 2.0秒後、**右脚**がひとりでに前方にスイングし、途中で膝が伸びて着地姿勢に入るのを確認します。
+3. 約3.54秒（`patternDelay + swingDuration + 1.0`）でシミュレーションが自動停止します。
 
 ### 🚨 【重要】脚がピクリとも動かない場合のトラブルシューティング
-コンソールにエラーが出ていないのに脚が動かない場合、以下の原因が考えられます。最新バージョンのCoppeliaSimでは設定方法が少し異なります。
+コンソールにエラーが出ていないのに脚が動かない場合、以下の原因が考えられます。
 
 **原因1: 関節の Control Mode の選択が適切でない（最新版の仕様）**
-最新版の CoppeliaSim では `Custom` モードは「ユーザーがコールバック関数（C++等）で完全に自作する専用」になり、通常のスクリプトからの `Target Velocity` 等の命令を受け付けない場合があります。
+最新版の CoppeliaSim では `Custom` モードは「ユーザーがコールバック関数（C++等）で完全に自作する専用」になり、通常のスクリプトからの命令を受け付けない場合があります。
 1. `RHip` と `RKnee` の Dynamic properties dialog を開きます。
 2. Control mode を `Custom` から **`Force/torque mode`**（または `Velocity mode`）に変更してください。
-3. もし上記のモードが無い場合は、**`Spring-damper mode` に戻し、Spring(K)とDamping(C)をともに完全な `0` に設定**してください。これで「スクリプトからのトルク指示」だけを受け付ける状態になります。
+3. もし上記のモードが無い場合は、**`Spring-damper mode` に戻し、Spring(K)とDamping(C)をともに完全な `0` に設定**してください。
 
 **原因2: 与えているトルクが（脚の重さに対して）小さすぎる**
-脚のパーツ（Thigh, Shank, Foot）の質量（Mass）や慣性モーメントが大きすぎると、`25.0` 程度のトルクではピクリとも動きません。
-- スクリプト内の `peakHipFlexTorque` と `peakKneeFlexTorque` を、思い切って **`200.0`** や **`500.0`** など極端に大きな値に変更して、少しでも動くかテストしてください。動いた場合は、そこから徐々に人間らしい値に下げていきます。
+脚のパーツの質量が大きすぎると、現在のトルク値ではピクリとも動きません。
+- スクリプト内の `peakHipFlexTorque` と `peakKneeFlexTorque` を、思い切って **`200.0`** や **`500.0`** など極端に大きな値に変更して動作確認し、動いた場合は徐々に現実的な値に下げてください。
 
 **原因3: 当たり判定（干渉）で引っかかっている**
-脚を前に振ろうとした瞬間、太もも（RThigh）が骨盤（Pelvis）にぶつかって（めり込んで）ロックされている可能性があります。
-- チュートリアル8で行ったように、オブジェクトの `Respondable` 設定を見直すか、Pelvisの形状を調整して干渉を避けてください。
-- あるいは無重力モードでも足の裏がすでに床（Floor）に接触・摩擦を起こしている可能性があります。Pelvis本体のZ位置（高さ）を少しだけ上に持ち上げてください。
+太もも（RThigh）が骨盤（Pelvis）にぶつかってロックされている可能性があります。
+- オブジェクトの `Respondable` 設定を見直すか、Pelvisの高さ（Z位置）を少し上に調整してください。
 
 ### 🚨 動きの調整（質量感に合わせたチューニング）
-トルク制御はモデルの脚の重さ（質量パラメータ）に非常に敏感です。脚がうまく振れない、もしくは振り上がりすぎる場合は、スクリプトの以下の数値を調整して「一番自然な一歩」になるようにチューニングしてください。
 
-- **脚が弱々しく上がらない・足先が引っかかる**： `peakHipFlexTorque` や `peakKneeFlexTorque` の値を `30.0` や `20.0` などに大きくする。
-- **脚が勢いよく上がりすぎてひっくり返る・前に飛び出すぎる**： 振り出しの力（`peakHipFlexTorque`）を小さくするか、後半のブレーキ力（`peakHipExtTorque`）の値を大きくして減速させる。
-- **膝の曲がる方向が逆（前方に折れる）場合**： `applyDirectTorque` に渡すトルクの符号を `-` に反転させる必要があります。
-
-この段階で「ほどよく自然な右脚の遊脚」が完成すれば、次のチュートリアルで「この自然な運動に対する介助（外的アシスト）の影響」を、関節角度のズレとして正確に評価することが可能になります。
+| 症状                     | 調整パラメータ                                                     |
+| ------------------------ | ------------------------------------------------------------------ |
+| 脚が弱々しく上がらない   | `peakHipFlexTorque` / `peakKneeFlexTorque` を大きくする            |
+| 脚が前に飛び出しすぎる   | `peakHipFlexTorque` を小さくするか `peakHipExtTorque` を大きくする |
+| 膝が前方向に折れる       | トルクの符号（`-` / `+`）を反転させる                              |
+| 着地時に膝が曲がりすぎる | `peakKneeBrakeTorque` を大きくする                                 |
+| 骨盤が揺れる             | `Kp_ang` / `Kd_ang` を増やす                                       |
 
 ---
 
@@ -257,16 +335,18 @@ dofile('/Users/aoyamahiroki/Desktop/CoppeliaSim_Tutorial/swing_script.lua')
 
 本チュートリアルの外部スクリプト（`Tutorial20_SwingPhase.lua`）には、シミュレーション中の姿勢や関節の動きを自動的に記録する機能が備わっています。
 
-シミュレーションが終了すると、デスクトップの `CoppeliaSim_Tutorial` フォルダ内に **`Tutorial20_SwingData.csv`** というファイルが自動生成されます。このCSVファイルには、0.05秒間隔で以下のデータが記録されています。
+シミュレーションが終了すると、デスクトップの `CoppeliaSim_Tutorial` フォルダ内に **`Tutorial20_SwingData.csv`** というファイルが自動生成されます。
 
 ### 📊 記録されるデータ項目（カラム）
 
-1. **`Time`** [s] : シミュレーションの経過時間
-2. **`Pelvis_Pitch_deg`** [°] : 骨盤の前後傾
-3. **`Pelvis_Roll_deg`** [°] : 骨盤の側方傾斜
-4. **`Pelvis_Yaw_deg`** [°] : 骨盤の回旋
-5. **`RHip_deg`** [°] : 股関節の角度（プラスが屈曲、マイナスが伸展）
-6. **`RKnee_deg`** [°] : 膝関節の角度（マイナスが屈曲、プラスが伸展）
-7. **`RFoot_Y_m`** [m] : 足部のY軸方向の位置（進行方向における絶対座標。前方に振り出された距離の確認に使えます）
+| #   | カラム名           | 単位 | 内容                                        |
+| --- | ------------------ | ---- | ------------------------------------------- |
+| 1   | `Time`             | s    | 遊脚開始（t=0）からの相対時間               |
+| 2   | `Pelvis_Pitch_deg` | °    | 骨盤の前後傾                                |
+| 3   | `Pelvis_Roll_deg`  | °    | 骨盤の側方傾斜                              |
+| 4   | `Pelvis_Yaw_deg`   | °    | 骨盤の回旋                                  |
+| 5   | `RHip_deg`         | °    | 股関節角度（プラスが屈曲、マイナスが伸展）  |
+| 6   | `RKnee_deg`        | °    | 膝関節角度（マイナスが屈曲、プラスが伸展）  |
+| 7   | `RFoot_Y_m`        | m    | 足部のY軸絶対座標（進行方向の前進距離確認） |
 
 ExcelやGoogleスプレッドシートでこのデータを開き、折れ線グラフを作成することで、「トルクに対する各関節の角度変化の遅れ」や「衝撃吸収（ブレーキ）の効果」などを視覚的に分析することができます。
